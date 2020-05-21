@@ -2126,16 +2126,21 @@ rnConDecl decl@(ConDeclGADT { con_names   = names
     do  { (new_cxt, fvs1)    <- rnMbContext ctxt mcxt
         ; (new_args, fvs2)   <- rnConDeclDetails (unLoc (head new_names)) ctxt args
         ; (new_res_ty, fvs3) <- rnLHsType ctxt res_ty
+        ; (args', res_ty')   <-
+            case args of
+              InfixCon {}  -> pprPanic "rnConDecl" (ppr names)
+              RecCon {}    -> pure (new_args, new_res_ty)
+              PrefixCon as -> do
+                -- In the PrefixCon case, the parser puts the entire body of
+                -- the constructor type, including argument types, into res_ty.
+                -- We can properly determine what the argument types are after
+                -- renaming (see Note [GADT abstract syntax] in GHC.Hs.Decls),
+                -- so we do so by splitting new_res_ty below.
+                MASSERT( null as )
+                (arg_tys, final_res_ty) <- split_prefix_gadt_ty ctxt new_res_ty
+                pure (PrefixCon arg_tys, final_res_ty)
 
         ; let all_fvs = fvs1 `plusFV` fvs2 `plusFV` fvs3
-              (args', res_ty')
-                  = case args of
-                      InfixCon {}  -> pprPanic "rnConDecl" (ppr names)
-                      RecCon {}    -> (new_args, new_res_ty)
-                      PrefixCon as | (arg_tys, final_res_ty) <- splitHsFunType new_res_ty
-                                   -> ASSERT( null as )
-                                      -- See Note [GADT abstract syntax] in GHC.Hs.Decls
-                                      (PrefixCon arg_tys, final_res_ty)
 
         ; traceRn "rnConDecl2" (ppr names $$ ppr implicit_tkvs $$ ppr explicit_tkvs)
         ; return (decl { con_g_ext = implicit_tkvs, con_names = new_names
@@ -2143,7 +2148,42 @@ rnConDecl decl@(ConDeclGADT { con_names   = names
                        , con_args = args', con_res_ty = res_ty'
                        , con_doc = mb_doc' },
                   all_fvs) } }
+  where
+    -- Split the body of a prefix GADT constructor type into its argument
+    -- and result types. Furthermore, ensure that there are no nested `forall`s
+    -- or contexts, per
+    -- Note [No nested foralls or contexts in GADT constructors] in
+    -- GHC.Parser.PostProcess.
+    split_prefix_gadt_ty :: HsDocContext
+                         -> LHsType GhcRn
+                         -> RnM ([LHsType GhcRn], LHsType GhcRn)
+    split_prefix_gadt_ty ctxt gadt_rho = do
+      let split_gadt_rho@(_, gadt_res_ty) = splitHsFunType gadt_rho
 
+      -- Check for nested `forall`s or contexts
+      case gadt_res_ty of
+        L l (HsForAllTy { hst_fvf = fvf })
+          |  ForallVis <- fvf
+          -> setSrcSpan l $ addErr $ withHsDocContext ctxt $ vcat
+             [ text "Illegal visible, dependent quantification" <+>
+               text "in the type of a term"
+             , text "(GHC does not yet support this)" ]
+          |  ForallInvis <- fvf
+          -> nested_foralls_contexts_err l ctxt
+        L l (HsQualTy {})
+          -> nested_foralls_contexts_err l ctxt
+        _ -> pure ()
+
+      pure split_gadt_rho
+
+    -- If we are going to reject a GADT constructor type for having nested
+    -- `forall`s or contexts, then we can at least suggest an alternative
+    -- way to write the type without nesting. (#12087)
+    nested_foralls_contexts_err :: SrcSpan -> HsDocContext -> RnM ()
+    nested_foralls_contexts_err l ctxt =
+      setSrcSpan l $ addErr $ withHsDocContext ctxt $
+      text "GADT constructor type signature cannot contain nested"
+      <+> quotes forAllLit <> text "s or contexts"
 
 rnMbContext :: HsDocContext -> Maybe (LHsContext GhcPs)
             -> RnM (Maybe (LHsContext GhcRn), FreeVars)
