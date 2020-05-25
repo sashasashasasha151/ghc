@@ -715,37 +715,31 @@ tc_hs_type mode (HsOpTy _ ty1 (L _ op) ty2) exp_kind
   = tc_fun_type mode ty1 ty2 exp_kind
 
 --------- Foralls
-tc_hs_type mode forall@(HsForAllTy { hst_fvf = fvf, hst_bndrs = hs_tvs
-                                   , hst_body = ty }) exp_kind
-  = do { (tclvl, wanted, (inv_tv_bndrs, ty'))
+tc_hs_type mode forall@(HsForAllTy { hst_tele = tele, hst_body = ty }) exp_kind
+  = do { (tclvl, wanted, (tv_bndrs, ty'))
             <- pushLevelAndCaptureConstraints $
-               bindExplicitTKBndrs_Skol hs_tvs $
+               bindExplicitTKTele_Skol tele $
                tc_lhs_type mode ty exp_kind
     -- Do not kind-generalise here!  See Note [Kind generalisation]
     -- Why exp_kind?  See Note [Body kind of HsForAllTy]
        ; let skol_info   = ForAllSkol (ppr forall)
-             m_telescope = Just (sep (map ppr hs_tvs))
+             m_telescope = Just $ sep $ case tele of
+                             HsForAllVis { hsf_vis_bndrs = hs_tvs } ->
+                               map ppr hs_tvs
+                             HsForAllInvis { hsf_invis_bndrs = hs_tvs } ->
+                               map ppr hs_tvs
+             tv_bndrs'   = construct_bndrs tv_bndrs
 
-       ; tv_bndrs <- mapM construct_bndr inv_tv_bndrs
+       ; emitResidualTvConstraint skol_info m_telescope (binderVars tv_bndrs') tclvl wanted
 
-       ; emitResidualTvConstraint skol_info m_telescope (binderVars tv_bndrs) tclvl wanted
-
-       ; return (mkForAllTys tv_bndrs ty') }
+       ; return (mkForAllTys tv_bndrs' ty') }
   where
-    construct_bndr :: TcInvisTVBinder -> TcM TcTyVarBinder
-    construct_bndr (Bndr tv spec) = do { argf <- spec_to_argf spec
-                                       ; return $ mkTyVarBinder argf tv }
-
-    -- See Note [Variable Specificity and Forall Visibility]
-    spec_to_argf :: Specificity -> TcM ArgFlag
-    spec_to_argf SpecifiedSpec = case fvf of
-      ForallVis   -> return Required
-      ForallInvis -> return Specified
-    spec_to_argf InferredSpec  = case fvf of
-      ForallVis   -> do { addErrTc (hang (text "Unexpected inferred variable in visible forall binder:")
-                                         2 (ppr forall))
-                        ; return Required }
-      ForallInvis -> return Inferred
+    construct_bndrs :: Either [TcReqTVBinder] [TcInvisTVBinder]
+                    -> [TcTyVarBinder]
+    construct_bndrs (Left req_tv_bndrs) =
+      map (mkTyVarBinder Required . binderVar) req_tv_bndrs
+    construct_bndrs (Right inv_tv_bndrs) =
+      map tyVarSpecToBinder inv_tv_bndrs
 
 tc_hs_type mode (HsQualTy { hst_ctxt = ctxt, hst_body = rn_ty }) exp_kind
   | null (unLoc ctxt)
@@ -880,21 +874,21 @@ tc_hs_type _    wc@(HsWildCardTy _)        ek = tcAnonWildCardOcc wc ek
 {-
 Note [Variable Specificity and Forall Visibility]
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-A HsForAllTy contains a ForAllVisFlag to denote the visibility of the forall
-binder. Furthermore, each bound variable also has a Specificity. Together these
-determine the variable binders (ArgFlag) for each variable in the generated
-ForAllTy type.
+A HsForAllTy contains an HsForAllTelescope to denote the visibility of the forall
+binder. Furthermore, each invisible type variable binder also has a
+Specificity. Together, these determine the variable binders (ArgFlag) for each
+variable in the generated ForAllTy type.
 
 This table summarises this relation:
---------------------------------------------------------------------------
-| User-written type         ForAllVisFlag     Specificity        ArgFlag
-|-------------------------------------------------------------------------
-| f :: forall a. type       ForallInvis       SpecifiedSpec      Specified
-| f :: forall {a}. type     ForallInvis       InferredSpec       Inferred
-| f :: forall a -> type     ForallVis         SpecifiedSpec      Required
-| f :: forall {a} -> type   ForallVis         InferredSpec       /
+----------------------------------------------------------------------------
+| User-written type         HsForAllTelescope   Specificity        ArgFlag
+|---------------------------------------------------------------------------
+| f :: forall a. type       HsForAllInvis       SpecifiedSpec      Specified
+| f :: forall {a}. type     HsForAllInvis       InferredSpec       Inferred
+| f :: forall a -> type     HsForAllVis         SpecifiedSpec      Required
+| f :: forall {a} -> type   HsForAllVis         InferredSpec       /
 |   This last form is non-sensical and is thus rejected.
---------------------------------------------------------------------------
+----------------------------------------------------------------------------
 
 For more information regarding the interpretation of the resulting ArgFlag, see
 Note [VarBndrs, TyCoVarBinders, TyConBinders, and visibility] in TyCoRep.
@@ -2696,6 +2690,20 @@ cloneFlexiKindedTyVarTyVar = newFlexiKindedTyVar cloneTyVarTyVar
 --------------------------------------
 -- Explicit binders
 --------------------------------------
+
+-- | Skolemise the 'HsTyVarBndr's in an 'LHsForAllTelescope.
+-- Returns 'Left' for visible @forall@s and 'Right' for invisible @forall@s.
+bindExplicitTKTele_Skol
+    :: HsForAllTelescope GhcRn
+    -> TcM a
+    -> TcM (Either [TcReqTVBinder] [TcInvisTVBinder], a)
+bindExplicitTKTele_Skol tele thing_inside = case tele of
+  HsForAllVis { hsf_vis_bndrs = bndrs } -> do
+    (req_tv_bndrs, thing) <- bindExplicitTKBndrs_Skol bndrs thing_inside
+    pure (Left req_tv_bndrs, thing)
+  HsForAllInvis { hsf_invis_bndrs = bndrs } -> do
+    (inv_tv_bndrs, thing) <- bindExplicitTKBndrs_Skol bndrs thing_inside
+    pure (Right inv_tv_bndrs, thing)
 
 bindExplicitTKBndrs_Skol, bindExplicitTKBndrs_Tv
     :: (OutputableBndrFlag flag)
