@@ -159,6 +159,11 @@ wrapL (CvtM m) = CvtM $ \origin loc -> case m origin loc of
   Left err -> Left err
   Right (loc', v) -> Right (loc', L loc v)
 
+wrapLN :: CvtM a -> CvtM (ApiAnnName a)
+wrapLN (CvtM m) = CvtM $ \origin loc -> case m origin loc of
+  Left err -> Left err
+  Right (loc', v) -> Right (loc', N (noAnnSrcSpan loc) v)
+
 wrapLA :: CvtM a -> CvtM (LocatedA a)
 wrapLA (CvtM m) = CvtM $ \origin loc -> case m origin loc of
   Left err -> Left err
@@ -171,7 +176,7 @@ cvtDecs = fmap catMaybes . mapM cvtDec
 cvtDec :: TH.Dec -> CvtM (Maybe (LHsDecl GhcPs))
 cvtDec (TH.ValD pat body ds)
   | TH.VarP s <- pat
-  = do  { s' <- vNameL s
+  = do  { s' <- vNameN s
         ; cl' <- cvtClause (mkPrefixFunRhs s') (Clause [] body ds)
         ; th_origin <- getOrigin
         ; returnJustLA $ Hs.ValD noExtField $ mkFunBind th_origin s' [cl'] }
@@ -192,19 +197,19 @@ cvtDec (TH.FunD nm cls)
                  <+> quotes (text (TH.pprint nm))
                  <+> text "has no equations")
   | otherwise
-  = do  { nm' <- vNameL nm
+  = do  { nm' <- vNameN nm
         ; cls' <- mapM (cvtClause (mkPrefixFunRhs nm')) cls
         ; th_origin <- getOrigin
         ; returnJustLA $ Hs.ValD noExtField $ mkFunBind th_origin nm' cls' }
 
 cvtDec (TH.SigD nm typ)
-  = do  { nm' <- vNameL nm
+  = do  { nm' <- vNameN nm
         ; ty' <- cvtType typ
         ; returnJustLA $ Hs.SigD noExtField
                                     (TypeSig noAnn [nm'] (mkLHsSigWcType ty')) }
 
 cvtDec (TH.KiSigD nm ki)
-  = do  { nm' <- tconNameL nm
+  = do  { nm' <- tconNameN nm
         ; ki' <- cvtType ki
         ; let sig' = StandaloneKindSig noAnn nm' (mkLHsSigType ki')
         ; returnJustLA $ Hs.KindSigD noExtField sig' }
@@ -214,7 +219,7 @@ cvtDec (TH.InfixD fx nm)
   -- the renamer automatically looks for types during renaming, even when
   -- the RdrName says it's a variable or a constructor. So, just assume
   -- it's a variable or constructor and proceed.
-  = do { nm' <- vcNameL nm
+  = do { nm' <- vcNameN nm
        ; returnJustLA (Hs.SigD noExtField (FixSig noAnn
                                       (FixitySig noExtField [nm'] (cvtFixity fx)))) }
 
@@ -404,13 +409,13 @@ cvtDec (TH.StandaloneDerivD ds cxt ty)
                    , deriv_overlap_mode = Nothing } }
 
 cvtDec (TH.DefaultSigD nm typ)
-  = do { nm' <- vNameL nm
+  = do { nm' <- vNameN nm
        ; ty' <- cvtType typ
        ; returnJustLA $ Hs.SigD noExtField
                      $ ClassOpSig noAnn True [nm'] (mkLHsSigType ty')}
 
 cvtDec (TH.PatSynD nm args dir pat)
-  = do { nm'   <- cNameL nm
+  = do { nm'   <- cNameN nm
        ; args' <- cvtArgs args
        ; dir'  <- cvtDir nm' dir
        ; pat'  <- cvtPat pat
@@ -424,6 +429,7 @@ cvtDec (TH.PatSynD nm args dir pat)
            ; vars' <- mapM (vNameL . mkNameS . nameBase) sels
            ; return $ Hs.RecCon $ zipWith RecordPatSynField sels' vars' }
 
+    -- cvtDir :: ApiAnnName RdrName -> (PatSynDir -> CvtM (HsPatSynDir RdrName))
     cvtDir _ Unidir          = return Unidirectional
     cvtDir _ ImplBidir       = return ImplicitBidirectional
     cvtDir n (ExplBidir cls) =
@@ -432,7 +438,7 @@ cvtDec (TH.PatSynD nm args dir pat)
          ; return $ ExplicitBidirectional $ mkMatchGroup th_origin ms }
 
 cvtDec (TH.PatSynSigD nm ty)
-  = do { nm' <- cNameL nm
+  = do { nm' <- cNameN nm
        ; ty' <- cvtPatSynSigTy ty
        ; returnJustLA $ Hs.SigD noExtField $ PatSynSig noAnn [nm'] (mkLHsSigType ty')}
 
@@ -744,7 +750,7 @@ cvt_conv TH.JavaScript = JavaScriptCallConv
 
 cvtPragmaD :: Pragma -> CvtM (Maybe (LHsDecl GhcPs))
 cvtPragmaD (InlineP nm inline rm phases)
-  = do { nm' <- vNameL nm
+  = do { nm' <- vNameN nm
        ; let dflt = dfltActivation inline
        ; let src TH.NoInline  = "{-# NOINLINE"
              src TH.Inline    = "{-# INLINE"
@@ -893,8 +899,8 @@ cvtImplicitParamBind n e = do
 cvtl :: TH.Exp -> CvtM (LHsExpr GhcPs)
 cvtl e = wrapLA (cvt e)
   where
-    cvt (VarE s)   = do { s' <- vName s; return $ HsVar noExtField (noLocA s') }
-    cvt (ConE s)   = do { s' <- cName s; return $ HsVar noExtField (noLocA s') }
+    cvt (VarE s)   = do { s' <- vName s; return $ HsVar noExtField (noApiName s') }
+    cvt (ConE s)   = do { s' <- cName s; return $ HsVar noExtField (noApiName s') }
     cvt (LitE l)
       | overloadedLit l = go cvtOverLit (HsOverLit noComments)
                              (hsOverLitNeedsParens appPrec)
@@ -1007,7 +1013,7 @@ cvtl e = wrapLA (cvt e)
                               ; let pe = parenthesizeHsExpr sigPrec e'
                               ; return
                                   $ ExprWithTySig noAnn pe (mkLHsSigWcType t') }
-    cvt (RecConE c flds) = do { c' <- cNameL c
+    cvt (RecConE c flds) = do { c' <- cNameN c
                               ; flds' <- mapM (cvtFld (mkFieldOcc . noLocA))
                                                flds
                               ; return $ mkRdrRecordCon c'
@@ -1022,7 +1028,7 @@ cvtl e = wrapLA (cvt e)
                               -- important, because UnboundVarE may contain
                               -- constructor names - see #14627.
                               { s' <- vcName s
-                              ; return $ HsVar noExtField (noLocA s') }
+                              ; return $ HsVar noExtField (noApiName s') }
     cvt (LabelE s)       = do { return $ HsOverLabel noComments Nothing (fsLit s) }
     cvt (ImplicitParamVarE n) = do { n' <- ipName n; return $ HsIPVar noComments n' }
 
@@ -1280,7 +1286,7 @@ cvtp (TH.LitP l)
                                   -- need to think about that!
   | otherwise          = do { l' <- cvtLit l; return $ Hs.LitPat noExtField l' }
 cvtp (TH.VarP s)       = do { s' <- vName s
-                            ; return $ Hs.VarPat noExtField (noLocA s') }
+                            ; return $ Hs.VarPat noExtField (noApiName s') }
 cvtp (TupP ps)         = do { ps' <- cvtPats ps
                             ; return $ TuplePat noAnn ps' Boxed }
 cvtp (UnboxedTupP ps)  = do { ps' <- cvtPats ps
@@ -1289,7 +1295,7 @@ cvtp (UnboxedSumP p alt arity)
                        = do { p' <- cvtPat p
                             ; unboxedSumChecks alt arity
                             ; return $ SumPat noAnn p' alt arity }
-cvtp (ConP s ps)       = do { s' <- cNameL s; ps' <- cvtPats ps
+cvtp (ConP s ps)       = do { s' <- cNameN s; ps' <- cvtPats ps
                             ; let pps = map (parenthesizePat appPrec) ps'
                             ; return $ ConPat
                                 { pat_con_ext = noAnn
@@ -1297,7 +1303,7 @@ cvtp (ConP s ps)       = do { s' <- cNameL s; ps' <- cvtPats ps
                                 , pat_args = PrefixCon pps
                                 }
                             }
-cvtp (InfixP p1 s p2)  = do { s' <- cNameL s; p1' <- cvtPat p1; p2' <- cvtPat p2
+cvtp (InfixP p1 s p2)  = do { s' <- cNameN s; p1' <- cvtPat p1; p2' <- cvtPat p2
                             ; wrapParLA (ParPat noExtField) $
                               ConPat
                                 { pat_con_ext = noAnn
@@ -1318,7 +1324,7 @@ cvtp (BangP p)         = do { p' <- cvtPat p; return $ BangPat noAnn p' }
 cvtp (TH.AsP s p)      = do { s' <- vNameL s; p' <- cvtPat p
                             ; return $ AsPat noAnn s' p' }
 cvtp TH.WildP          = return $ WildPat noExtField
-cvtp (RecP c fs)       = do { c' <- cNameL c; fs' <- mapM cvtPatFld fs
+cvtp (RecP c fs)       = do { c' <- cNameN c; fs' <- mapM cvtPatFld fs
                             ; return $ ConPat
                                 { pat_con_ext = noAnn
                                 , pat_con = c'
@@ -1353,7 +1359,7 @@ cvtOpAppP x op1 (UInfixP y op2 z)
   = do { l <- wrapLA $ cvtOpAppP x op1 y
        ; cvtOpAppP l op2 z }
 cvtOpAppP x op y
-  = do { op' <- cNameL op
+  = do { op' <- cNameN op
        ; y' <- cvtPat y
        ; return $ ConPat
           { pat_con_ext = noAnn
@@ -1852,26 +1858,32 @@ mkHsQualTy ctxt loc ctxt' ty
 --------------------------------------------------------------------
 
 -- variable names
+vNameN, cNameN, vcNameN, tNameN, tconNameN :: TH.Name -> CvtM (ApiAnnName RdrName)
 vNameL, cNameL, vcNameL, tNameL, tconNameL :: TH.Name -> CvtM (LocatedA RdrName)
 vName,  cName,  vcName,  tName,  tconName  :: TH.Name -> CvtM RdrName
 
 -- Variable names
+vNameN n = wrapLN (vName n)
 vNameL n = wrapLA (vName n)
 vName n = cvtName OccName.varName n
 
 -- Constructor function names; this is Haskell source, hence srcDataName
+cNameN n = wrapLN (cName n)
 cNameL n = wrapLA (cName n)
 cName n = cvtName OccName.dataName n
 
 -- Variable *or* constructor names; check by looking at the first char
+vcNameN n = wrapLN (vcName n)
 vcNameL n = wrapLA (vcName n)
 vcName n = if isVarName n then vName n else cName n
 
 -- Type variable names
+tNameN n = wrapLN (tName n)
 tNameL n = wrapLA (tName n)
 tName n = cvtName OccName.tvName n
 
 -- Type Constructor names
+tconNameN n = wrapLN (tconName n)
 tconNameL n = wrapLA (tconName n)
 tconName n = cvtName OccName.tcClsName n
 

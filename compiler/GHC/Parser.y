@@ -893,7 +893,7 @@ export  :: { OrdList (LIE GhcPs) }
                                           >>= \ie -> fmap (unitOL . reLocA) (return (sLL $1 $> ie)) }
         |  'module' modid            {% fmap (unitOL . reLocA) (ams (\cs -> sLL $1 $> (IEModuleContents (ApiAnn (glR $1) [mj AnnModule $1] cs) $2))
                                              [mj AnnModule $1]) }
-        |  'pattern' qcon            {% fmap (unitOL . reLocA) (ams (\cs -> sLLlA $1 $> (IEVar (ApiAnn (glR $1) [mj AnnPattern $1] cs) (sLLlA $1 $> (IEPattern $2))))
+        |  'pattern' qcon            {% fmap (unitOL . reLocA) (ams (\cs -> sLLlA $1 $> (IEVar (ApiAnn (glR $1) [mj AnnPattern $1] cs) (sLLlA $1 $> (IEPattern (l2n $2)))))
                                              [mj AnnPattern $1]) }
 
 export_subspec :: { Located ([AddApiAnn],ImpExpSubSpec) }
@@ -927,7 +927,7 @@ qcname_ext_w_wildcard :: { Located ([AddApiAnn], Located ImpExpQcSpec) }
         |  '..'                     { sL1 $1 ([mj AnnDotdot $1], sL1 $1 ImpExpQcWildcard)  }
 
 qcname_ext :: { Located ImpExpQcSpec }
-        :  qcname                   { sL1A $1 (ImpExpQcName $1) }
+        :  qcname                   { sL1A $1 (ImpExpQcName (l2n $1)) }
         |  'type' oqtycon           {% do { n' <- reA $1 $2 [mj AnnType $1]
                                           ; n <- mkTypeImpExp n'
                                           ; return $ sLLlA $1 $> (ImpExpQcType n) }}
@@ -1147,7 +1147,7 @@ ty_decl :: { LTyClDecl GhcPs }
 -- standalone kind signature
 standalone_kind_sig :: { LStandaloneKindSig GhcPs }
   : 'type' sks_vars '::' ktypedoc
-      {% mkStandaloneKindSig (comb2A $1 $4) $2 $4
+      {% mkStandaloneKindSig (comb2A $1 $4) (L (gl $2) $ map l2n $ unLoc $2) $4
                [mj AnnType $1,mu AnnDcolon $3]}
 
 -- See also: sig_vars
@@ -1473,20 +1473,20 @@ role : VARID             { sL1 $1 $ Just $ getVARID $1 }
 pattern_synonym_decl :: { LHsDecl GhcPs }
         : 'pattern' pattern_synonym_lhs '=' pat
          {%      let (name, args,as ) = $2 in
-                 acsA (\cs -> sLL $1 (reLoc $>) . ValD noExtField $ mkPatSynBind name args $4
+                 acsA (\cs -> sLL $1 (reLoc $>) . ValD noExtField $ mkPatSynBind (l2n name) args $4
                                                     ImplicitBidirectional
                       (ApiAnn (glR $1) (as ++ [mj AnnPattern $1, mj AnnEqual $3]) cs)) }
 
         | 'pattern' pattern_synonym_lhs '<-' pat
          {%    let (name, args, as) = $2 in
-               acsA (\cs -> sLL $1 (reLoc $>) . ValD noExtField $ mkPatSynBind name args $4 Unidirectional
+               acsA (\cs -> sLL $1 (reLoc $>) . ValD noExtField $ mkPatSynBind (l2n name) args $4 Unidirectional
                        (ApiAnn (glR $1) (as ++ [mj AnnPattern $1,mu AnnLarrow $3]) cs)) }
 
         | 'pattern' pattern_synonym_lhs '<-' pat where_decls
             {% do { let (name, args, as) = $2
                   ; mg <- mkPatSynMatchGroup name (snd $ unLoc $5)
                   ; acsA (\cs -> sLL $1 $> . ValD noExtField $
-                           mkPatSynBind name args $4 (ExplicitBidirectional mg)
+                           mkPatSynBind (l2n name) args $4 (ExplicitBidirectional mg)
                             (ApiAnn (glR $1) (as ++ ((mj AnnPattern $1:mu AnnLarrow $3:(fst $ unLoc $5))) ) cs))
                    }}
 
@@ -1513,7 +1513,7 @@ where_decls :: { Located ([AddApiAnn]
 
 pattern_synonym_sig :: { LSig GhcPs }
         : 'pattern' con_list '::' sigtypedoc
-                   {% ams (\cs -> sLL $1 (reLoc $>) $ PatSynSig (ApiAnn (glR $1) [mj AnnPattern $1, mu AnnDcolon $3] cs) (unLoc $2) (mkLHsSigType $4))
+                   {% ams (\cs -> sLL $1 (reLoc $>) $ PatSynSig (ApiAnn (glR $1) [mj AnnPattern $1, mu AnnDcolon $3] cs) (map l2n $ unLoc $2) (mkLHsSigType $4))
                           [mj AnnPattern $1, mu AnnDcolon $3] }
 
 -----------------------------------------------------------------------------
@@ -2504,7 +2504,7 @@ sigdecl :: { LHsDecl GhcPs }
                                   TypeSig (ApiAnn (glAR $1) [mu AnnDcolon $2] noCom) [v] (mkLHsSigWcType $3))} }
 
         | var ',' sig_vars '::' sigtypedoc
-           {% do { let sig cs = TypeSig (ApiAnn (glAR $1) [mu AnnDcolon $4] cs) ($1 : reverse (unLoc $3))
+           {% do { let sig cs = TypeSig (ApiAnn (glAR $1) [mu AnnDcolon $4] cs) (map l2n ($1 : reverse (unLoc $3)))
                                      (mkLHsSigWcType $5)
                  ; addAnnotationS (glA $1) AnnComma (gl $2)
                  ; acsA (\cs -> sLLAl $1 (reLoc $>) $ SigD noExtField (sig cs) ) }}
@@ -2512,7 +2512,7 @@ sigdecl :: { LHsDecl GhcPs }
         | infix prec ops
               {% checkPrecP $2 $3 >>
                  acsA (\cs -> sLL $1 $> $ SigD noExtField
-                        (FixSig (ApiAnn (glR $1) [mj AnnInfix $1,mj AnnVal $2] cs) (FixitySig noExtField (fromOL $ unLoc $3)
+                        (FixSig (ApiAnn (glR $1) [mj AnnInfix $1,mj AnnVal $2] cs) (FixitySig noExtField (map l2n $ fromOL $ unLoc $3)
                                 (Fixity (fst $ unLoc $2) (snd $ unLoc $2) (unLoc $1))))) }
 
         | pattern_synonym_sig   { reLocA $ sLL $1 $> . SigD noExtField . unLoc $ $1 }
@@ -2525,17 +2525,17 @@ sigdecl :: { LHsDecl GhcPs }
 
         -- This rule is for both INLINE and INLINABLE pragmas
         | '{-# INLINE' activation qvar '#-}'
-                {% acsA (\cs -> (sLL $1 $> $ SigD noExtField (InlineSig (ApiAnn (glR $1) ((mo $1:fst $2) ++ [mc $4]) cs) $3
+                {% acsA (\cs -> (sLL $1 $> $ SigD noExtField (InlineSig (ApiAnn (glR $1) ((mo $1:fst $2) ++ [mc $4]) cs) (l2n $3)
                             (mkInlinePragma (getINLINE_PRAGs $1) (getINLINE $1)
                                             (snd $2))))) }
 
         | '{-# SCC' qvar '#-}'
-          {% acsA (\cs -> sLL $1 $> (SigD noExtField (SCCFunSig (ApiAnn (glR $1) [mo $1, mc $3] cs) (getSCC_PRAGs $1) $2 Nothing))) }
+          {% acsA (\cs -> sLL $1 $> (SigD noExtField (SCCFunSig (ApiAnn (glR $1) [mo $1, mc $3] cs) (getSCC_PRAGs $1) (l2n $2) Nothing))) }
 
         | '{-# SCC' qvar STRING '#-}'
           {% do { scc <- getSCC $3
                 ; let str_lit = StringLiteral (getSTRINGs $3) scc
-                ; acsA (\cs -> sLL $1 $> (SigD noExtField (SCCFunSig (ApiAnn (glR $1) [mo $1, mc $4] cs) (getSCC_PRAGs $1) $2 (Just ( sL1 $3 str_lit))))) }}
+                ; acsA (\cs -> sLL $1 $> (SigD noExtField (SCCFunSig (ApiAnn (glR $1) [mo $1, mc $4] cs) (getSCC_PRAGs $1) (l2n $2) (Just ( sL1 $3 str_lit))))) }}
 
         | '{-# SPECIALISE' activation qvar '::' sigtypes1 '#-}'
              {% acsA (\cs ->
@@ -2822,8 +2822,8 @@ aexp1   :: { ECP }
         | aexp2                { $1 }
 
 aexp2   :: { ECP }
-        : qvar                          { ECP $ mkHsVarPV $! $1 }
-        | qcon                          { ECP $ mkHsVarPV $! $1 }
+        : qvar                          { ECP $ mkHsVarPV $! (l2n $1) }
+        | qcon                          { ECP $ mkHsVarPV $! (l2n $1) }
         | ipvar                         {% acsExpr (\cs -> sL1a $1 (HsIPVar (comment (glR $1) cs) $! unLoc $1)) }
         | overloaded_label              {% acsExpr (\cs -> sL1a $1 (HsOverLabel (comment (glR $1) cs) Nothing $! unLoc $1)) }
         | literal                       { ECP $ pvA (mkHsLitPV $! $1) }
@@ -3561,13 +3561,13 @@ varop   :: { LocatedA RdrName }
                                         ,mj AnnBackquote $3] }
 
 qop     :: { forall b. DisambInfixOp b => PV (LocatedA b) }   -- used in sections
-        : qvarop                { mkHsVarOpPV $1 }
-        | qconop                { mkHsConOpPV $1 }
+        : qvarop                { mkHsVarOpPV (l2n $1) }
+        | qconop                { mkHsConOpPV (l2n $1) }
         | hole_op               { pvA $1 }
 
 qopm    :: { forall b. DisambInfixOp b => PV (LocatedA b) }   -- used in sections
-        : qvaropm               { mkHsVarOpPV $1 }
-        | qconop                { mkHsConOpPV $1 }
+        : qvaropm               { mkHsVarOpPV (l2n $1) }
+        | qconop                { mkHsConOpPV (l2n $1) }
         | hole_op               { pvA $1 }
 
 hole_op :: { forall b. DisambInfixOp b => PV (Located b) }   -- used in sections

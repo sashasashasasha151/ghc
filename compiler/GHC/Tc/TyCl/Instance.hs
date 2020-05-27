@@ -1212,7 +1212,7 @@ addDFunPrags dfun_id sc_meth_ids
    is_newtype  = isNewTyCon clas_tc
 
 wrapId :: HsWrapper -> Id -> HsExpr GhcTc
-wrapId wrapper id = mkHsWrap wrapper (HsVar noExtField (noLocA id))
+wrapId wrapper id = mkHsWrap wrapper (HsVar noExtField (noApiName id))
 
 {- Note [Typechecking plan for instance declarations]
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1639,7 +1639,7 @@ tcMethods dfun_id clas tyvars dfun_ev_vars inst_tys
     checkMethBindMembership
       = mapM_ (addErrTc . badMethodErr clas) mismatched_meths
       where
-        bind_nms         = map unLoc $ collectMethodBinders binds
+        bind_nms         = map unApiName $ collectMethodBinders binds
         cls_meth_nms     = map (idName . fst) op_items
         mismatched_meths = bind_nms `minusList` cls_meth_nms
 
@@ -1730,7 +1730,7 @@ tcMethodBody clas tyvars dfun_ev_vars inst_tys
                                             mkMethIds clas tyvars dfun_ev_vars
                                                       inst_tys sel_id
 
-       ; let lm_bind = meth_bind { fun_id = L (noAnnSrcSpan bndr_loc)
+       ; let lm_bind = meth_bind { fun_id = N (noAnnSrcSpan bndr_loc)
                                                         (idName local_meth_id) }
                        -- Substitute the local_meth_name for the binder
                        -- NB: the binding is always a FunBind
@@ -1961,7 +1961,7 @@ mkDefMethBind clas inst_tys sel_id dm_name
                  -- Copy the inline pragma (if any) from the default method
                  -- to this version. Note [INLINE and default methods]
 
-              fn   = noLocA (idName sel_id)
+              fn   = noApiName (idName sel_id)
               visible_inst_tys = [ ty | (tcb, ty) <- tyConBinders (classTyCon clas) `zip` inst_tys
                                       , tyConBinderArgFlag tcb /= Inferred ]
               rhs  = foldl' mk_vta (nlHsVar dm_name) visible_inst_tys

@@ -1,5 +1,8 @@
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE DeriveFunctor      #-}
+{-# LANGUAGE DeriveFoldable     #-}
+{-# LANGUAGE DeriveTraversable  #-}
 {-# LANGUAGE EmptyCase #-}
 {-# LANGUAGE EmptyDataDeriving #-}
 {-# LANGUAGE FlexibleContexts #-}
@@ -261,7 +264,8 @@ comment loc cs = ApiAnn loc NoApiAnns cs
 
 type LocatedA = GenLocated SrcSpanAnn
 
-data SrcSpanAnn = SrcSpanAnn { ann :: ApiAnn, locA :: SrcSpan }
+type SrcSpanAnn = SrcSpanAnn' ApiAnn
+data SrcSpanAnn' a = SrcSpanAnn { ann :: a, locA :: SrcSpan }
         deriving (Data, Eq)
 
 instance Outputable SrcSpanAnn where
@@ -288,6 +292,48 @@ addCLocA a b c = L (noAnnSrcSpan $ combineSrcSpans (locA $ getLoc a) (getLoc b))
 
 addCLocAA :: LocatedA a -> LocatedA b -> c -> LocatedA c
 addCLocAA a b c = L (noAnnSrcSpan $ combineSrcSpans (locA $ getLoc a) (locA $ getLoc b)) c
+
+-- ---------------------------------------------------------------------
+-- Annotations for names
+-- ---------------------------------------------------------------------
+-- We initially wrapped all names in Located as a hook for the
+-- annotations. Now we can do it directly
+
+type SrcSpanAnnName = SrcSpanAnn' ApiAnn
+
+noAnnName :: SrcSpanAnnName
+noAnnName = noSrcSpanA
+
+data ApiAnnName a = N SrcSpanAnnName a
+        deriving (Eq, Data, Functor, Foldable, Traversable)
+
+unApiName :: ApiAnnName a -> a
+unApiName (N _ a) = a
+
+noApiName :: a -> ApiAnnName a
+noApiName a = N noAnnName a
+
+getLocN :: ApiAnnName a -> SrcSpan
+getLocN (N (SrcSpanAnn _ l) _) = l
+
+getNA :: ApiAnnName a -> SrcSpanAnnName
+getNA (N a _) = a
+
+reLocN :: ApiAnnName a -> Located a
+reLocN (N (SrcSpanAnn _ l) a) = L l a
+
+-- |Helper function (temporary) during transition of names
+l2n :: LocatedA a -> ApiAnnName a
+l2n (L la a) = N la a
+
+n2l :: ApiAnnName a -> LocatedA a
+n2l (N la a) = L la a
+
+la2na :: SrcSpanAnn -> SrcSpanAnnName
+la2na = id
+
+instance (Outputable e) => Outputable (ApiAnnName e) where
+  ppr (N _ e) = ppr e
 
 -- ---------------------------------------------------------------------
 -- Managing annotations for lists

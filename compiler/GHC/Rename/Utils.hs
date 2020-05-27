@@ -10,7 +10,7 @@ This module contains miscellaneous functions related to renaming.
 {-# OPTIONS_GHC -Wno-incomplete-uni-patterns #-}
 
 module GHC.Rename.Utils (
-        checkDupRdrNames, checkShadowedRdrNames,
+        checkDupRdrNames, checkDupRdrNamesN, checkShadowedRdrNames,
         checkDupNames, checkDupAndShadowedNames, dupNamesErr,
         checkTupSize,
         addFvRn, mapFvRn, mapMaybeFvRn,
@@ -109,6 +109,13 @@ checkDupRdrNames rdr_names_w_loc
   = mapM_ (dupNamesErr getLocA) dups
   where
     (_, dups) = removeDups (\n1 n2 -> unLoc n1 `compare` unLoc n2) rdr_names_w_loc
+
+checkDupRdrNamesN :: [ApiAnnName RdrName] -> RnM ()
+-- Check for duplicated names in a binding group
+checkDupRdrNamesN rdr_names_w_loc
+  = mapM_ (dupNamesErr getLocN) dups
+  where
+    (_, dups) = removeDups (\n1 n2 -> unApiName n1 `compare` unApiName n2) rdr_names_w_loc
 
 checkDupNames :: [Name] -> RnM ()
 -- Check for duplicated names in a binding group

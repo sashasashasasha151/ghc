@@ -345,11 +345,11 @@ tc_pat  :: ExpSigmaType
         -- ^ Translated pattern
 tc_pat pat_ty penv ps_pat thing_inside = case ps_pat of
 
-  VarPat x (L l name) -> do
+  VarPat x (N l name) -> do
         { (wrap, id) <- tcPatBndr penv name pat_ty
         ; res <- tcExtendIdEnv1 name id thing_inside
         ; pat_ty <- readExpType pat_ty
-        ; return (mkHsWrapPat wrap (VarPat x (L l id)) pat_ty, res) }
+        ; return (mkHsWrapPat wrap (VarPat x (N l id)) pat_ty, res) }
 
   ParPat x pat -> do
         { (pat', res) <- tc_lpat pat_ty penv pat thing_inside
@@ -804,11 +804,11 @@ to express the local scope of GADT refinements.
 -- MkT :: forall a b c. (a~[b]) => b -> c -> T a
 --       with scrutinee of type (T ty)
 
-tcConPat :: PatEnv -> LocatedA Name
+tcConPat :: PatEnv -> ApiAnnName Name
          -> ExpSigmaType           -- Type of the pattern
          -> HsConPatDetails GhcRn -> TcM a
          -> TcM (Pat GhcTcId, a)
-tcConPat penv con_lname@(L _ con_name) pat_ty arg_pats thing_inside
+tcConPat penv con_lname@(N _ con_name) pat_ty arg_pats thing_inside
   = do  { con_like <- tcLookupConLike con_name
         ; case con_like of
             RealDataCon data_con -> tcDataConPat penv con_lname data_con
@@ -817,17 +817,17 @@ tcConPat penv con_lname@(L _ con_name) pat_ty arg_pats thing_inside
                                              pat_ty arg_pats thing_inside
         }
 
-tcDataConPat :: PatEnv -> LocatedA Name -> DataCon
+tcDataConPat :: PatEnv -> ApiAnnName Name -> DataCon
              -> ExpSigmaType               -- Type of the pattern
              -> HsConPatDetails GhcRn -> TcM a
              -> TcM (Pat GhcTcId, a)
-tcDataConPat penv (L con_span con_name) data_con pat_ty
+tcDataConPat penv (N con_span con_name) data_con pat_ty
              arg_pats thing_inside
   = do  { let tycon = dataConTyCon data_con
                   -- For data families this is the representation tycon
               (univ_tvs, ex_tvs, eq_spec, theta, arg_tys, _)
                 = dataConFullSig data_con
-              header = L con_span (RealDataCon data_con)
+              header = N con_span (RealDataCon data_con)
 
           -- Instantiate the constructor type variables [a->ty]
           -- This may involve doing a family-instance coercion,
@@ -920,11 +920,11 @@ tcDataConPat penv (L con_span con_name) data_con pat_ty
         ; return (mkHsWrapPat wrap res_pat pat_ty, res)
         } }
 
-tcPatSynPat :: PatEnv -> LocatedA Name -> PatSyn
+tcPatSynPat :: PatEnv -> ApiAnnName Name -> PatSyn
             -> ExpSigmaType                -- Type of the pattern
             -> HsConPatDetails GhcRn -> TcM a
             -> TcM (Pat GhcTcId, a)
-tcPatSynPat penv (L con_span _) pat_syn pat_ty arg_pats thing_inside
+tcPatSynPat penv (N con_span _) pat_syn pat_ty arg_pats thing_inside
   = do  { let (univ_tvs, req_theta, ex_tvs, prov_theta, arg_tys, ty) = patSynSig pat_syn
 
         ; (subst, univ_tvs') <- newMetaTyVars univ_tvs
@@ -961,7 +961,7 @@ tcPatSynPat penv (L con_span _) pat_syn pat_ty arg_pats thing_inside
                 tcConArgs (PatSynCon pat_syn) arg_tys' penv arg_pats thing_inside
 
         ; traceTc "checkConstraints }" (ppr ev_binds)
-        ; let res_pat = ConPat { pat_con   = L con_span $ PatSynCon pat_syn
+        ; let res_pat = ConPat { pat_con   = N con_span $ PatSynCon pat_syn
                                , pat_args  = arg_pats'
                                , pat_con_ext = ConPatTc
                                  { cpt_tvs   = ex_tvs'

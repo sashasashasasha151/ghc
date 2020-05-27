@@ -692,7 +692,7 @@ tcAddPatSynPlaceholders :: [PatSynBind GhcRn GhcRn] -> TcM a -> TcM a
 -- See Note [Don't promote pattern synonyms]
 tcAddPatSynPlaceholders pat_syns thing_inside
   = tcExtendKindEnvList [ (name, APromotionErr PatSynPE)
-                        | PSB{ psb_id = L _ name } <- pat_syns ]
+                        | PSB{ psb_id = N _ name } <- pat_syns ]
        thing_inside
 
 getTypeSigNames :: [LSig GhcRn] -> NameSet
@@ -703,8 +703,8 @@ getTypeSigNames sigs
     get_type_sig :: LSig GhcRn -> NameSet -> NameSet
     get_type_sig sig ns =
       case sig of
-        L _ (TypeSig _ names _) -> extendNameSetList ns (map unLoc names)
-        L _ (PatSynSig _ names _) -> extendNameSetList ns (map unLoc names)
+        L _ (TypeSig _ names _) -> extendNameSetList ns (map unApiName names)
+        L _ (PatSynSig _ names _) -> extendNameSetList ns (map unApiName names)
         _ -> ns
 
 

@@ -716,7 +716,7 @@ getLocalNonValBinders fixity_env
 
     -- In a hs-boot file, the value binders come from the
     --  *signatures*, and there should be no foreign binders
-    hs_boot_sig_bndrs = [ L (noAnnSrcSpan decl_loc) (unLoc n)
+    hs_boot_sig_bndrs = [ L (noAnnSrcSpan decl_loc) (unApiName n)
                         | L decl_loc (TypeSig _ ns _) <- val_sigs, n <- ns]
 
       -- the SrcSpan attached to the input should be the span of the
@@ -1642,14 +1642,14 @@ printMinimalImports imports_w_usage
 
 to_ie_post_rn_var :: (HasOccName name) => LocatedA name -> LIEWrappedName name
 to_ie_post_rn_var (L l n)
-  | isDataOcc $ occName n = L (locA l) (IEPattern (L l n))
-  | otherwise             = L (locA l) (IEName    (L l n))
+  | isDataOcc $ occName n = L (locA l) (IEPattern (N (la2na l) n))
+  | otherwise             = L (locA l) (IEName    (N (la2na l) n))
 
 
 to_ie_post_rn :: (HasOccName name) => LocatedA name -> LIEWrappedName name
 to_ie_post_rn (L l n)
-  | isTcOcc occ && isSymOcc occ = L (locA l) (IEType (L l n))
-  | otherwise                   = L (locA l) (IEName (L l n))
+  | isTcOcc occ && isSymOcc occ = L (locA l) (IEType (N (la2na l) n))
+  | otherwise                   = L (locA l) (IEName (N (la2na l) n))
   where occ = occName n
 
 {-
@@ -1772,7 +1772,7 @@ dodgyMsgInsert :: forall p . IdP (GhcPass p) -> IE (GhcPass p)
 dodgyMsgInsert tc = IEThingAll noAnn ii
   where
     ii :: LIEWrappedName (IdP (GhcPass p))
-    ii = noLoc (IEName $ noLocA tc)
+    ii = noLoc (IEName $ noApiName tc)
 
 
 addDupDeclErr :: [GlobalRdrElt] -> TcRn ()

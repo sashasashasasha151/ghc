@@ -65,6 +65,9 @@ testOneFile libdir fileName = do
                                                          (pm_parsed_source p')
        writeFile newAstFile newAstStr
 
+       putStrLn $ "anns':" ++ showGhc (apiAnnComments anns')
+       putStrLn $ "anns':" ++ showGhc (apiAnnRogueComments anns')
+
        if origAst == newAstStr
          then do
            -- putStrLn "ASTs matched"

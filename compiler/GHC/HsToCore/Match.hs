@@ -422,7 +422,7 @@ tidy1 v o (BangPat _ (L l p)) = tidy_bang_pat v o l p
 
         -- case v of { x -> mr[] }
         -- = case v of { _ -> let x=v in mr[] }
-tidy1 v _ (VarPat _ (L _ var))
+tidy1 v _ (VarPat _ (N _ var))
   = return (wrapBind var v, WildPat (idType var))
 
         -- case v of { x@p -> mr[] }
@@ -523,7 +523,7 @@ tidy_bang_pat v o _ p@(TuplePat {})  = tidy1 v o p
 tidy_bang_pat v o _ p@(SumPat {})    = tidy1 v o p
 
 -- Data/newtype constructors
-tidy_bang_pat v o l p@(ConPat { pat_con = L _ (RealDataCon dc)
+tidy_bang_pat v o l p@(ConPat { pat_con = N _ (RealDataCon dc)
                               , pat_args = args
                               , pat_con_ext = ConPatTc
                                 { cpt_arg_tys = arg_tys
@@ -1124,7 +1124,7 @@ viewLExprEq (e1,_) (e2,_) = lexp e1 e2
     eq_list eq (x:xs) (y:ys) = eq x y && eq_list eq xs ys
 
 patGroup :: Platform -> Pat GhcTc -> PatGroup
-patGroup _ (ConPat { pat_con = L _ con
+patGroup _ (ConPat { pat_con = N _ con
                    , pat_con_ext = ConPatTc { cpt_arg_tys = tys }
                    })
  | RealDataCon dcon <- con              = PgCon dcon

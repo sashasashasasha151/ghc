@@ -792,7 +792,7 @@ rep_fix_d loc (FixitySig _ names (Fixity _ prec dir))
                         InfixR -> infixRDName
                         InfixN -> infixNDName
        ; let do_one name
-              = do { MkC name' <- lookupLOcc name
+              = do { MkC name' <- lookupNOcc name
                    ; dec <- rep2 rep_fn [prec', name']
                    ; return (loc,dec) }
        ; mapM do_one names }
@@ -990,7 +990,7 @@ rep_sig (L _   (SCCFunSig {}))        = notHandled "SCC pragmas" empty
 rep_sig (L loc (CompleteMatchSig _ _st cls mty))
   = rep_complete_sig cls mty loc
 
-rep_ty_sig :: Name -> SrcSpan -> LHsSigType GhcRn -> LocatedA Name
+rep_ty_sig :: Name -> SrcSpan -> LHsSigType GhcRn -> ApiAnnName Name
            -> MetaM (SrcSpan, Core (M TH.Dec))
 -- Don't create the implicit and explicit variables when desugaring signatures,
 -- see Note [Scoped type variables in class and instance declarations].
@@ -998,7 +998,7 @@ rep_ty_sig :: Name -> SrcSpan -> LHsSigType GhcRn -> LocatedA Name
 rep_ty_sig mk_sig loc sig_ty nm
   | HsIB { hsib_body = hs_ty } <- sig_ty
   , (explicit_tvs, ctxt, ty) <- splitLHsSigmaTyInvis hs_ty
-  = do { nm1 <- lookupLOcc nm
+  = do { nm1 <- lookupNOcc nm
        ; let rep_in_scope_tv tv = do { name <- lookupBinder (hsLTyVarName tv)
                                      ; repTyVarBndrWithKind tv name }
        ; th_explicit_tvs <- repListM tyVarBndrSpecTyConName rep_in_scope_tv
@@ -1015,7 +1015,7 @@ rep_ty_sig mk_sig loc sig_ty nm
        ; sig     <- repProto mk_sig nm1 ty1
        ; return (loc, sig) }
 
-rep_patsyn_ty_sig :: SrcSpan -> LHsSigType GhcRn -> LocatedA Name
+rep_patsyn_ty_sig :: SrcSpan -> LHsSigType GhcRn -> ApiAnnName Name
                   -> MetaM (SrcSpan, Core (M TH.Dec))
 -- represents a pattern synonym type signature;
 -- see Note [Pattern synonym type signatures and Template Haskell] in Convert
@@ -1026,7 +1026,7 @@ rep_patsyn_ty_sig :: SrcSpan -> LHsSigType GhcRn -> LocatedA Name
 rep_patsyn_ty_sig loc sig_ty nm
   | HsIB { hsib_body = hs_ty } <- sig_ty
   , (univs, reqs, exis, provs, ty) <- splitLHsPatSynTy hs_ty
-  = do { nm1 <- lookupLOcc nm
+  = do { nm1 <- lookupNOcc nm
        ; let rep_in_scope_tv tv = do { name <- lookupBinder (hsLTyVarName tv)
                                      ; repTyVarBndrWithKind tv name }
        ; th_univs <- repListM tyVarBndrSpecTyConName rep_in_scope_tv univs
@@ -1043,17 +1043,17 @@ rep_patsyn_ty_sig loc sig_ty nm
        ; sig      <- repProto patSynSigDName nm1 ty1
        ; return (loc, sig) }
 
-rep_wc_ty_sig :: Name -> SrcSpan -> LHsSigWcType GhcRn -> LocatedA Name
+rep_wc_ty_sig :: Name -> SrcSpan -> LHsSigWcType GhcRn -> ApiAnnName Name
               -> MetaM (SrcSpan, Core (M TH.Dec))
 rep_wc_ty_sig mk_sig loc sig_ty nm
   = rep_ty_sig mk_sig loc (hswc_body sig_ty) nm
 
-rep_inline :: LocatedA Name
+rep_inline :: ApiAnnName Name
            -> InlinePragma      -- Never defaultInlinePragma
            -> SrcSpan
            -> MetaM [(SrcSpan, Core (M TH.Dec))]
 rep_inline nm ispec loc
-  = do { nm1    <- lookupLOcc nm
+  = do { nm1    <- lookupNOcc nm
        ; inline <- repInline $ inl_inline ispec
        ; rm     <- repRuleMatch $ inl_rule ispec
        ; phases <- repPhases $ inl_act ispec
@@ -1411,7 +1411,7 @@ repLE :: LHsExpr GhcRn -> MetaM (Core (M TH.Exp))
 repLE (L loc e) = mapReaderT (putSrcSpanDs (locA loc)) (repE e)
 
 repE :: HsExpr GhcRn -> MetaM (Core (M TH.Exp))
-repE (HsVar _ (L _ x)) =
+repE (HsVar _ (N _ x)) =
   do { mb_val <- lift $ dsLookupMetaEnv x
      ; case mb_val of
         Nothing            -> do { str <- lift $ globalVar x
@@ -1423,7 +1423,7 @@ repE (HsIPVar _ n) = rep_implicit_param_name n >>= repImplicitParamVar
 repE (HsOverLabel _ _ s) = repOverLabel s
 
 repE e@(HsRecFld _ f) = case f of
-  Unambiguous x _ -> repE (HsVar noExtField (noLocA x))
+  Unambiguous x _ -> repE (HsVar noExtField (noApiName x))
   Ambiguous{}     -> notHandled "Ambiguous record selectors" (ppr e)
 
         -- Remember, we're desugaring renamer output here, so
@@ -1512,7 +1512,7 @@ repE (ExplicitSum _ alt arity e)
       ; repUnboxedSum e1 alt arity }
 
 repE (RecordCon { rcon_con_name = c, rcon_flds = flds })
- = do { x <- lookupLOcc c;
+ = do { x <- lookupNOcc c;
         fs <- repFields flds;
         repRecCon x fs }
 repE (RecordUpd { rupd_expr = e, rupd_flds = flds })
@@ -1772,7 +1772,7 @@ rep_bind (L loc (FunBind
                                       )]) } }))
  = do { (ss,wherecore) <- repBinds wheres
         ; guardcore <- addBinds ss (repGuards guards)
-        ; fn'  <- lookupLBinder fn
+        ; fn'  <- lookupNBinder fn
         ; p    <- repPvar fn'
         ; ans  <- repVal p guardcore wherecore
         ; ans' <- wrapGenSyms ss ans
@@ -1781,7 +1781,7 @@ rep_bind (L loc (FunBind
 rep_bind (L loc (FunBind { fun_id = fn
                          , fun_matches = MG { mg_alts = L _ ms } }))
  =   do { ms1 <- mapM repClauseTup ms
-        ; fn' <- lookupLBinder fn
+        ; fn' <- lookupNBinder fn
         ; ans <- repFun fn' (nonEmptyCoreList ms1)
         ; return (locA loc, ans) }
 
@@ -1808,7 +1808,7 @@ rep_bind (L loc (PatSynBind _ (PSB { psb_id   = syn
                                    , psb_args = args
                                    , psb_def  = pat
                                    , psb_dir  = dir })))
-  = do { syn'      <- lookupLBinder syn
+  = do { syn'      <- lookupNBinder syn
        ; dir'      <- repPatSynDir dir
        ; ss        <- mkGenArgSyms args
        ; patSynD'  <- addBinds ss (
@@ -1938,7 +1938,7 @@ repLP p = repP (unLoc p)
 repP :: Pat GhcRn -> MetaM (Core (M TH.Pat))
 repP (WildPat _)        = repPwild
 repP (LitPat _ l)       = do { l2 <- repLiteral l; repPlit l2 }
-repP (VarPat _ x)       = do { x' <- lookupBinder (unLoc x); repPvar x' }
+repP (VarPat _ x)       = do { x' <- lookupBinder (unApiName x); repPvar x' }
 repP (LazyPat _ p)      = do { p1 <- repLP p; repPtilde p1 }
 repP (BangPat _ p)      = do { p1 <- repLP p; repPbang p1 }
 repP (AsPat _ x p)      = do { x' <- lookupLBinder x; p1 <- repLP p
@@ -1955,7 +1955,7 @@ repP (TuplePat _ ps boxed)
 repP (SumPat _ p alt arity) = do { p1 <- repLP p
                                  ; repPunboxedSum p1 alt arity }
 repP (ConPat NoExtField dc details)
- = do { con_str <- lookupLOcc dc
+ = do { con_str <- lookupNOcc dc
       ; case details of
          PrefixCon ps -> do { qs <- repLPs ps; repPcon con_str qs }
          RecCon rec   -> do { fps <- repListM fieldPatTyConName rep_fld (rec_flds rec)
@@ -2025,6 +2025,9 @@ addBinds bs m = mapReaderT (dsExtendMetaEnv (mkNameEnv [(n,DsBound id) | (n,id) 
 lookupLBinder :: LocatedA Name -> MetaM (Core TH.Name)
 lookupLBinder n = lookupBinder (unLoc n)
 
+lookupNBinder :: ApiAnnName Name -> MetaM (Core TH.Name)
+lookupNBinder n = lookupBinder (unApiName n)
+
 lookupBinder :: Name -> MetaM (Core TH.Name)
 lookupBinder = lookupOcc
   -- Binders are brought into scope before the pattern or what-not is
@@ -2041,6 +2044,11 @@ lookupLOcc :: LocatedA Name -> MetaM (Core TH.Name)
 -- Lookup an occurrence; it can't be a splice.
 -- Use the in-scope bindings if they exist
 lookupLOcc n = lookupOcc (unLoc n)
+
+lookupNOcc :: ApiAnnName Name -> MetaM (Core TH.Name)
+-- Lookup an occurrence; it can't be a splice.
+-- Use the in-scope bindings if they exist
+lookupNOcc n = lookupOcc (unApiName n)
 
 lookupOcc :: Name -> MetaM (Core TH.Name)
 lookupOcc = lift . lookupOccDsM

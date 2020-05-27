@@ -427,7 +427,7 @@ mkPmLitGrds x lit = do
 translatePat :: FamInstEnvs -> Id -> Pat GhcTc -> DsM GrdVec
 translatePat fam_insts x pat = case pat of
   WildPat  _ty -> pure []
-  VarPat _ y   -> pure (mkPmLetVar (unLoc y) x)
+  VarPat _ y   -> pure (mkPmLetVar (unApiName y) x)
   ParPat _ p   -> translateLPat fam_insts x p
   LazyPat _ _  -> pure [] -- like a wildcard
   BangPat _ p  ->
@@ -499,7 +499,7 @@ translatePat fam_insts x pat = case pat of
     --
     -- See #14547, especially comment#9 and comment#10.
 
-  ConPat { pat_con     = L _ con
+  ConPat { pat_con     = N _ con
          , pat_args    = ps
          , pat_con_ext = ConPatTc
            { cpt_arg_tys = arg_tys
@@ -1306,6 +1306,6 @@ pprContext singular (DsMatchContext kind _loc) msg rest_of_msg_fun
 
     (ppr_match, pref)
         = case kind of
-             FunRhs { mc_fun = L _ fun }
+             FunRhs { mc_fun = N _ fun }
                   -> (pprMatchContext kind, \ pp -> ppr fun <+> pp)
              _    -> (pprMatchContext kind, \ pp -> pp)

@@ -131,12 +131,12 @@ getMainDeclBinder (ForD _ (ForeignExport _ _ _ _)) = []
 getMainDeclBinder _ = []
 
 sigNameNoLoc :: Sig pass -> [IdP pass]
-sigNameNoLoc (TypeSig    _   ns _)         = map unLoc ns
-sigNameNoLoc (ClassOpSig _ _ ns _)         = map unLoc ns
-sigNameNoLoc (PatSynSig  _   ns _)         = map unLoc ns
+sigNameNoLoc (TypeSig    _   ns _)         = map unApiName ns
+sigNameNoLoc (ClassOpSig _ _ ns _)         = map unApiName ns
+sigNameNoLoc (PatSynSig  _   ns _)         = map unApiName ns
 sigNameNoLoc (SpecSig    _   n _ _)        = [unLoc n]
-sigNameNoLoc (InlineSig  _   n _)          = [unLoc n]
-sigNameNoLoc (FixSig _ (FixitySig _ ns _)) = map unLoc ns
+sigNameNoLoc (InlineSig  _   n _)          = [unApiName n]
+sigNameNoLoc (FixSig _ (FixitySig _ ns _)) = map unApiName ns
 sigNameNoLoc _                             = []
 
 -- Extract the source location where an instance is defined. This is used

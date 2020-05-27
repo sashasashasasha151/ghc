@@ -161,10 +161,10 @@ checking until step (3).
 ************************************************************************
 -}
 
-funsSigCtxt :: [LocatedA Name] -> UserTypeCtxt
+funsSigCtxt :: [ApiAnnName Name] -> UserTypeCtxt
 -- Returns FunSigCtxt, with no redundant-context-reporting,
 -- form a list of located names
-funsSigCtxt (L _ name1 : _) = FunSigCtxt name1 False
+funsSigCtxt (N _ name1 : _) = FunSigCtxt name1 False
 funsSigCtxt []              = panic "funSigCtxt"
 
 addSigCtxt :: UserTypeCtxt -> LHsType GhcRn -> TcM a -> TcM a
@@ -193,7 +193,7 @@ tcHsSigWcType :: UserTypeCtxt -> LHsSigWcType GhcRn -> TcM Type
 -- already checked this, so we can simply ignore it.
 tcHsSigWcType ctxt sig_ty = tcHsSigType ctxt (dropWildCards sig_ty)
 
-kcClassSigType :: SkolemInfo -> [LocatedA Name] -> LHsSigType GhcRn -> TcM ()
+kcClassSigType :: SkolemInfo -> [ApiAnnName Name] -> LHsSigType GhcRn -> TcM ()
 -- This is a special form of tcClassSigType that is used during the
 -- kind-checking phase to infer the kind of class variables. Cf. tc_hs_sig_type.
 -- Importantly, this does *not* kind-generalize. Consider
@@ -218,7 +218,7 @@ kcClassSigType skol_info names (HsIB { hsib_ext  = sig_vars
        ; emitResidualTvConstraint skol_info Nothing spec_tkvs
                                   tc_lvl wanted }
 
-tcClassSigType :: SkolemInfo -> [LocatedA Name] -> LHsSigType GhcRn -> TcM Type
+tcClassSigType :: SkolemInfo -> [ApiAnnName Name] -> LHsSigType GhcRn -> TcM Type
 -- Does not do validity checking
 tcClassSigType skol_info names sig_ty
   = addSigCtxt (funsSigCtxt names) (hsSigType sig_ty) $
@@ -263,7 +263,7 @@ tcHsSigType ctxt sig_ty
 -- Does validity checking and zonking.
 tcStandaloneKindSig :: LStandaloneKindSig GhcRn -> TcM (Name, Kind)
 tcStandaloneKindSig (L _ kisig) = case kisig of
-  StandaloneKindSig _ (L _ name) ksig ->
+  StandaloneKindSig _ (N _ name) ksig ->
     let ctxt = StandaloneKindSigCtxt name in
     addSigCtxt ctxt (hsSigType ksig) $
     do { kind <- tcTopLHsType kindLevelMode ksig (expectedKindInCtxt ctxt)

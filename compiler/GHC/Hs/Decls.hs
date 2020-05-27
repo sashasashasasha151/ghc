@@ -1334,7 +1334,7 @@ type LStandaloneKindSig pass = Located (StandaloneKindSig pass)
 
 data StandaloneKindSig pass
   = StandaloneKindSig (XStandaloneKindSig pass)
-      (LocatedA (IdP pass)) -- Why a single binder? See #16754
+      (ApiAnnName (IdP pass)) -- Why a single binder? See #16754
       (LHsSigType pass)     -- Why not LHsSigWcType? See Note [Wildcards in standalone kind signatures]
   | XStandaloneKindSig !(XXStandaloneKindSig pass)
 
@@ -1345,7 +1345,7 @@ type instance XStandaloneKindSig GhcTc = NoExtField
 type instance XXStandaloneKindSig (GhcPass p) = NoExtCon
 
 standaloneKindSigName :: StandaloneKindSig (GhcPass p) -> IdP (GhcPass p)
-standaloneKindSigName (StandaloneKindSig _ lname _) = unLoc lname
+standaloneKindSigName (StandaloneKindSig _ lname _) = unApiName lname
 
 {- Note [Wildcards in standalone kind signatures]
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1541,7 +1541,7 @@ instance OutputableBndrId p
 instance OutputableBndrId p
        => Outputable (StandaloneKindSig (GhcPass p)) where
   ppr (StandaloneKindSig _ v ki)
-    = text "type" <+> pprPrefixOcc (unLoc v) <+> text "::" <+> ppr ki
+    = text "type" <+> pprPrefixOcc (unApiName v) <+> text "::" <+> ppr ki
 
 instance Outputable NewOrData where
   ppr NewType  = text "newtype"

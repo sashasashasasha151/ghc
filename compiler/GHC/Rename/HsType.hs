@@ -1220,7 +1220,7 @@ instance Outputable OpName where
 get_op :: LHsExpr GhcRn -> OpName
 -- An unbound name could be either HsVar or HsUnboundVar
 -- See GHC.Rename.Expr.rnUnboundVar
-get_op (L _ (HsVar _ n))         = NormalOp (unLoc n)
+get_op (L _ (HsVar _ n))         = NormalOp (unApiName n)
 get_op (L _ (HsUnboundVar _ uv)) = UnboundOp uv
 get_op (L _ (HsRecFld _ fld))    = RecFldOp fld
 get_op other                     = pprPanic "get_op" (ppr other)
@@ -1277,16 +1277,16 @@ mkOpFormRn arg1 op fix arg2                     -- Default case, no rearrangment
 
 
 --------------------------------------
-mkConOpPatRn :: LocatedA Name -> Fixity -> LPat GhcRn -> LPat GhcRn
+mkConOpPatRn :: ApiAnnName Name -> Fixity -> LPat GhcRn -> LPat GhcRn
              -> RnM (Pat GhcRn)
 
 mkConOpPatRn op2 fix2 p1@(L loc (ConPat NoExtField op1 (InfixCon p11 p12))) p2
-  = do  { fix1 <- lookupFixityRn (unLoc op1)
+  = do  { fix1 <- lookupFixityRn (unApiName op1)
         ; let (nofix_error, associate_right) = compareFixity fix1 fix2
 
         ; if nofix_error then do
-                { precParseErr (NormalOp (unLoc op1),fix1)
-                               (NormalOp (unLoc op2),fix2)
+                { precParseErr (NormalOp (unApiName op1),fix1)
+                               (NormalOp (unApiName op2),fix2)
                 ; return $ ConPat
                     { pat_con_ext = noExtField
                     , pat_con = op2
@@ -1350,15 +1350,15 @@ checkPrecMatch op (MG { mg_alts = (L _ ms) })
 checkPrec :: Name -> Pat GhcRn -> Bool -> IOEnv (Env TcGblEnv TcLclEnv) ()
 checkPrec op (ConPat NoExtField op1 (InfixCon _ _)) right = do
     op_fix@(Fixity _ op_prec  op_dir) <- lookupFixityRn op
-    op1_fix@(Fixity _ op1_prec op1_dir) <- lookupFixityRn (unLoc op1)
+    op1_fix@(Fixity _ op1_prec op1_dir) <- lookupFixityRn (unApiName op1)
     let
         inf_ok = op1_prec > op_prec ||
                  (op1_prec == op_prec &&
                   (op1_dir == InfixR && op_dir == InfixR && right ||
                    op1_dir == InfixL && op_dir == InfixL && not right))
 
-        info  = (NormalOp op,          op_fix)
-        info1 = (NormalOp (unLoc op1), op1_fix)
+        info  = (NormalOp op,              op_fix)
+        info1 = (NormalOp (unApiName op1), op1_fix)
         (infol, infor) = if right then (info, info1) else (info1, info)
     unless inf_ok (precParseErr infol infor)
 

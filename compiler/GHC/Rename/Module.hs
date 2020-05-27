@@ -31,7 +31,8 @@ import GHC.Rename.HsType
 import GHC.Rename.Bind
 import GHC.Rename.Env
 import GHC.Rename.Utils ( HsDocContext(..), mapFvRn, bindLocalNames
-                        , checkDupRdrNames, inHsDocContext, bindLocalNamesFV
+                        , checkDupRdrNames, checkDupRdrNamesN
+                        , inHsDocContext, bindLocalNamesFV
                         , checkShadowedRdrNames, warnUnusedTypePatterns
                         , extendTyVarEnvFVRn, newLocalBndrsRn
                         , withHsDocContext )
@@ -478,7 +479,7 @@ checkCanonicalInstances cls poly_ty mbinds = do
       | cls == applicativeClassName  = do
           forM_ (bagToList mbinds) $ \(L loc mbind) -> setSrcSpanA loc $ do
               case mbind of
-                  FunBind { fun_id = L _ name
+                  FunBind { fun_id = N _ name
                           , fun_matches = mg }
                       | name == pureAName, isAliasMG mg == Just returnMName
                       -> addWarnNonCanonicalMethod1
@@ -493,7 +494,7 @@ checkCanonicalInstances cls poly_ty mbinds = do
       | cls == monadClassName  = do
           forM_ (bagToList mbinds) $ \(L loc mbind) -> setSrcSpanA loc $ do
               case mbind of
-                  FunBind { fun_id = L _ name
+                  FunBind { fun_id = N _ name
                           , fun_matches = mg }
                       | name == returnMName, isAliasMG mg /= Just pureAName
                       -> addWarnNonCanonicalMethod2
@@ -524,7 +525,7 @@ checkCanonicalInstances cls poly_ty mbinds = do
       | cls == semigroupClassName  = do
           forM_ (bagToList mbinds) $ \(L loc mbind) -> setSrcSpanA loc $ do
               case mbind of
-                  FunBind { fun_id      = L _ name
+                  FunBind { fun_id      = N _ name
                           , fun_matches = mg }
                       | name == sappendName, isAliasMG mg == Just mappendName
                       -> addWarnNonCanonicalMethod1
@@ -535,7 +536,7 @@ checkCanonicalInstances cls poly_ty mbinds = do
       | cls == monoidClassName  = do
           forM_ (bagToList mbinds) $ \(L loc mbind) -> setSrcSpanA loc $ do
               case mbind of
-                  FunBind { fun_id = L _ name
+                  FunBind { fun_id = N _ name
                           , fun_matches = mg }
                       | name == mappendName, isAliasMG mg /= Just sappendName
                       -> addWarnNonCanonicalMethod2NoDefault
@@ -552,7 +553,7 @@ checkCanonicalInstances cls poly_ty mbinds = do
                                              , m_grhss = grhss })])}
         | GRHSs _ [L _ (GRHS _ [] body)] lbinds <- grhss
         , EmptyLocalBinds _ <- unLoc lbinds
-        , HsVar _ lrhsName  <- unLoc body  = Just (unLoc lrhsName)
+        , HsVar _ lrhsName  <- unLoc body  = Just (unApiName lrhsName)
     isAliasMG _ = Nothing
 
     -- got "lhs = rhs" but expected something different
@@ -1110,7 +1111,7 @@ validRuleLhs foralls lhs
     check (HsApp _ e1 e2)                 = checkl e1 `mplus` checkl_e e2
     check (HsAppType _ e _)               = checkl e
     check (HsVar _ lv)
-      | (unLoc lv) `notElem` foralls      = Nothing
+      | (unApiName lv) `notElem` foralls  = Nothing
     check other                           = Just other  -- Failure
 
         -- Check an argument
@@ -1391,7 +1392,7 @@ rnStandaloneKindSignature
 rnStandaloneKindSignature tc_names (StandaloneKindSig _ v ki)
   = do  { standalone_ki_sig_ok <- xoptM LangExt.StandaloneKindSignatures
         ; unless standalone_ki_sig_ok $ addErr standaloneKiSigErr
-        ; new_v <- lookupSigCtxtOccRn (TopSigCtxt tc_names) (text "standalone kind signature") v
+        ; new_v <- lookupSigCtxtOccRnN (TopSigCtxt tc_names) (text "standalone kind signature") v
         ; let doc = StandaloneKindSigCtx (ppr v)
         ; (new_ki, fvs) <- rnHsSigType doc KindLevel Nothing ki
         ; return (StandaloneKindSig noExtField new_v new_ki, fvs)
@@ -1645,7 +1646,7 @@ rnTyClDecl (ClassDecl { tcdCtxt = context, tcdLName = lcls,
         ; let sig_rdr_names_w_locs =
                 [op | L _ (ClassOpSig _ False ops _) <- sigs
                     , op <- ops]
-        ; checkDupRdrNames sig_rdr_names_w_locs
+        ; checkDupRdrNamesN sig_rdr_names_w_locs
                 -- Typechecker is responsible for checking that we only
                 -- give default-method bindings for things in this class.
                 -- The renamer *could* check this for class decls, but can't
@@ -2202,7 +2203,7 @@ extendPatSynEnv val_decls local_fix_env thing = do {
             -> [(Name, [FieldLabel])]
             -> TcM [(Name, [FieldLabel])]
     new_ps' bind names
-      | (L bind_loc (PatSynBind _ (PSB { psb_id = L _ n
+      | (L bind_loc (PatSynBind _ (PSB { psb_id = N _ n
                                        , psb_args = RecCon as }))) <- bind
       = do
           bnd_name <- newTopSrcBinder (L bind_loc n)
@@ -2212,7 +2213,7 @@ extendPatSynEnv val_decls local_fix_env thing = do {
               field_occs =  map mkFieldOcc rnames
           flds     <- mapM (newRecordSelector False [bnd_name]) field_occs
           return ((bnd_name, flds): names)
-      | L bind_loc (PatSynBind _ (PSB { psb_id = L _ n})) <- bind
+      | L bind_loc (PatSynBind _ (PSB { psb_id = N _ n})) <- bind
       = do
         bnd_name <- newTopSrcBinder (L bind_loc n)
         return ((bnd_name, []): names)
