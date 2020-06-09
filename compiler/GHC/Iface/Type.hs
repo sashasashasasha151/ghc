@@ -1598,6 +1598,8 @@ ppr_role :: Role -> SDoc
 ppr_role r = underscore <> pp_role
   where pp_role = case r of
                     Nominal          -> char 'N'
+                    Covariance       -> char 'O'
+                    Contravariance   -> char 'I'
                     Representational -> char 'R'
                     Phantom          -> char 'P'
 

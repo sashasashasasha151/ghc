@@ -2145,7 +2145,7 @@ implicitTyConThings tc
 -- For newtypes and closed type families (only) add the implicit coercion tycon
 implicitCoTyCon :: TyCon -> [TyThing]
 implicitCoTyCon tc
-  | Just co <- newTyConCo_maybe tc = [ACoAxiom $ toBranchedAxiom co]
+  | Just co <- newTyConCo_maybe tc = flip map co $ (ACoAxiom . toBranchedAxiom)
   | Just co <- isClosedSynFamilyTyConWithAxiom_maybe tc
                                    = [ACoAxiom co]
   | otherwise                      = []

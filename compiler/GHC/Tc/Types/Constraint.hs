@@ -442,7 +442,7 @@ mkTcEqPredLikeEv :: CtEvidence -> TcType -> TcType -> TcType
 mkTcEqPredLikeEv ev
   = case predTypeEqRel pred of
       NomEq  -> mkPrimEqPred
-      ReprEq -> mkReprPrimEqPred
+      _ -> mkReprPrimEqPred
   where
     pred = ctEvPred ev
 
@@ -1605,6 +1605,10 @@ eqCanRewrite :: EqRel -> EqRel -> Bool
 eqCanRewrite NomEq  _      = True
 eqCanRewrite ReprEq ReprEq = True
 eqCanRewrite ReprEq NomEq  = False
+eqCanRewrite ReprEq CoEq   = True
+eqCanRewrite ReprEq ContraEq = True
+eqCanRewrite CoEq _ = False
+eqCanRewrite ContraEq _ = False
 
 eqCanRewriteFR :: CtFlavourRole -> CtFlavourRole -> Bool
 -- Can fr1 actually rewrite fr2?

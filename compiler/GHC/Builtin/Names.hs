@@ -1901,6 +1901,12 @@ typeSymbolAppendFamNameKey = mkPreludeTyConUnique 190
 unsafeEqualityTyConKey :: Unique
 unsafeEqualityTyConKey = mkPreludeTyConUnique 191
 
+eqCovarPrimTyConKey :: Unique
+eqCovarPrimTyConKey = mkPreludeTyConUnique 192
+
+eqContravarPrimTyConKey :: Unique
+eqContravarPrimTyConKey = mkPreludeTyConUnique 193
+
 
 ---------------- Template Haskell -------------------
 --      GHC.Builtin.Names.TH: USES TyConUniques 200-299

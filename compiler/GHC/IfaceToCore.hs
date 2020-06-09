@@ -285,7 +285,20 @@ d1 `withRolesFrom` d2
     = d1 { ifRoles = mergeRoles roles1 roles2 }
     | otherwise = d1
   where
-    mergeRoles roles1 roles2 = zipWithEqual "mergeRoles" max roles1 roles2
+    mergeRoles roles1 roles2 = zipWithEqual "mergeRoles" maxRole roles1 roles2
+
+maxRole :: Role -> Role -> Role
+maxRole Phantom          _                = Phantom
+maxRole _                Phantom          = Phantom
+maxRole Covariance       Contravariance   = Phantom
+maxRole Contravariance   Covariance       = Phantom
+maxRole Covariance       _                = Covariance
+maxRole _                Covariance       = Covariance
+maxRole Contravariance   _                = Contravariance
+maxRole _                Contravariance   = Contravariance
+maxRole Representational _                = Representational
+maxRole _                Representational = Representational
+maxRole _                _                = Nominal
 
 isRepInjectiveIfaceDecl :: IfaceDecl -> Bool
 isRepInjectiveIfaceDecl IfaceData{ ifCons = IfDataTyCon _ } = True

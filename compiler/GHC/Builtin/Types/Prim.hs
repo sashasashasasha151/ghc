@@ -79,9 +79,11 @@ module GHC.Builtin.Types.Prim(
         int64PrimTyCon,         int64PrimTy, int64PrimTyConName,
         word64PrimTyCon,        word64PrimTy, word64PrimTyConName,
 
-        eqPrimTyCon,            -- ty1 ~# ty2
-        eqReprPrimTyCon,        -- ty1 ~R# ty2  (at role Representational)
-        eqPhantPrimTyCon,       -- ty1 ~P# ty2  (at role Phantom)
+        eqPrimTyCon,              -- ty1 ~# ty2
+        eqReprPrimTyCon,          -- ty1 ~R# ty2  (at role Representational)
+        eqPhantPrimTyCon,         -- ty1 ~P# ty2  (at role Phantom)
+        eqCovarPrimTyConName,     -- ty1 ~O# ty2  (at role Covariance)
+        eqContravarPrimTyConName, -- ty1 ~I# ty2  (at role Contravariance)
         equalityTyCon,
 
         -- * SIMD
@@ -204,7 +206,7 @@ mkBuiltInPrimTc fs unique tycon
                   BuiltInSyntax
 
 
-charPrimTyConName, intPrimTyConName, int8PrimTyConName, int16PrimTyConName, int32PrimTyConName, int64PrimTyConName, wordPrimTyConName, word32PrimTyConName, word8PrimTyConName, word16PrimTyConName, word64PrimTyConName, addrPrimTyConName, floatPrimTyConName, doublePrimTyConName, statePrimTyConName, proxyPrimTyConName, realWorldTyConName, arrayPrimTyConName, arrayArrayPrimTyConName, smallArrayPrimTyConName, byteArrayPrimTyConName, mutableArrayPrimTyConName, mutableByteArrayPrimTyConName, mutableArrayArrayPrimTyConName, smallMutableArrayPrimTyConName, mutVarPrimTyConName, mVarPrimTyConName, tVarPrimTyConName, stablePtrPrimTyConName, stableNamePrimTyConName, compactPrimTyConName, bcoPrimTyConName, weakPrimTyConName, threadIdPrimTyConName, eqPrimTyConName, eqReprPrimTyConName, eqPhantPrimTyConName, voidPrimTyConName :: Name
+charPrimTyConName, intPrimTyConName, int8PrimTyConName, int16PrimTyConName, int32PrimTyConName, int64PrimTyConName, wordPrimTyConName, word32PrimTyConName, word8PrimTyConName, word16PrimTyConName, word64PrimTyConName, addrPrimTyConName, floatPrimTyConName, doublePrimTyConName, statePrimTyConName, proxyPrimTyConName, realWorldTyConName, arrayPrimTyConName, arrayArrayPrimTyConName, smallArrayPrimTyConName, byteArrayPrimTyConName, mutableArrayPrimTyConName, mutableByteArrayPrimTyConName, mutableArrayArrayPrimTyConName, smallMutableArrayPrimTyConName, mutVarPrimTyConName, mVarPrimTyConName, tVarPrimTyConName, stablePtrPrimTyConName, stableNamePrimTyConName, compactPrimTyConName, bcoPrimTyConName, weakPrimTyConName, threadIdPrimTyConName, eqPrimTyConName, eqReprPrimTyConName, eqPhantPrimTyConName, voidPrimTyConName, eqCovarPrimTyConName, eqContravarPrimTyConName :: Name
 charPrimTyConName             = mkPrimTc (fsLit "Char#") charPrimTyConKey charPrimTyCon
 intPrimTyConName              = mkPrimTc (fsLit "Int#") intPrimTyConKey  intPrimTyCon
 int8PrimTyConName             = mkPrimTc (fsLit "Int8#") int8PrimTyConKey int8PrimTyCon
@@ -225,6 +227,8 @@ proxyPrimTyConName            = mkPrimTc (fsLit "Proxy#") proxyPrimTyConKey prox
 eqPrimTyConName               = mkPrimTc (fsLit "~#") eqPrimTyConKey eqPrimTyCon
 eqReprPrimTyConName           = mkBuiltInPrimTc (fsLit "~R#") eqReprPrimTyConKey eqReprPrimTyCon
 eqPhantPrimTyConName          = mkBuiltInPrimTc (fsLit "~P#") eqPhantPrimTyConKey eqPhantPrimTyCon
+eqCovarPrimTyConName          = mkBuiltInPrimTc (fsLit "~O#") eqCovarPrimTyConKey eqCovarPrimTyCon
+eqContravarPrimTyConName      = mkBuiltInPrimTc (fsLit "~I#") eqContravarPrimTyConKey eqContravarPrimTyCon
 realWorldTyConName            = mkPrimTc (fsLit "RealWorld") realWorldTyConKey realWorldTyCon
 arrayPrimTyConName            = mkPrimTc (fsLit "Array#") arrayPrimTyConKey arrayPrimTyCon
 byteArrayPrimTyConName        = mkPrimTc (fsLit "ByteArray#") byteArrayPrimTyConKey byteArrayPrimTyCon
@@ -901,6 +905,28 @@ eqPrimTyCon  = mkPrimTyCon eqPrimTyConName binders res_kind roles
     res_kind = unboxedTupleKind []
     roles    = [Nominal, Nominal, Nominal, Nominal]
 
+-- like eqPrimTyCon, but the type for *Phantom* coercions.
+-- This is only used to make higher-order equalities. Nothing
+-- should ever actually have this type!
+eqCovarPrimTyCon :: TyCon
+eqCovarPrimTyCon = mkPrimTyCon eqCovarPrimTyConName binders res_kind roles
+  where
+    -- Kind :: forall k1 k2. k1 -> k2 -> TYPE (Tuple '[])
+    binders  = mkTemplateTyConBinders [liftedTypeKind, liftedTypeKind] id
+    res_kind = unboxedTupleKind []
+    roles    = [Nominal, Nominal, Covariance, Covariance]
+
+-- like eqPrimTyCon, but the type for *Phantom* coercions.
+-- This is only used to make higher-order equalities. Nothing
+-- should ever actually have this type!
+eqContravarPrimTyCon :: TyCon
+eqContravarPrimTyCon = mkPrimTyCon eqContravarPrimTyConName binders res_kind roles
+  where
+    -- Kind :: forall k1 k2. k1 -> k2 -> TYPE (Tuple '[])
+    binders  = mkTemplateTyConBinders [liftedTypeKind, liftedTypeKind] id
+    res_kind = unboxedTupleKind []
+    roles    = [Nominal, Nominal, Contravariance, Contravariance]
+
 -- like eqPrimTyCon, but the type for *Representational* coercions
 -- this should only ever appear as the type of a covar. Its role is
 -- interpreted in coercionRole
@@ -928,6 +954,8 @@ equalityTyCon :: Role -> TyCon
 equalityTyCon Nominal          = eqPrimTyCon
 equalityTyCon Representational = eqReprPrimTyCon
 equalityTyCon Phantom          = eqPhantPrimTyCon
+equalityTyCon Covariance       = eqCovarPrimTyCon
+equalityTyCon Contravariance   = eqContravarPrimTyCon
 
 {- *********************************************************************
 *                                                                      *

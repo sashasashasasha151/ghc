@@ -11,7 +11,7 @@
 {-# OPTIONS_GHC -Wno-incomplete-uni-patterns #-}
 
 -- | Handles @deriving@ clauses on @data@ declarations.
-module GHC.Tc.Deriv ( tcDeriving, DerivInfo(..) ) where
+module GHC.Tc.Deriv ( tcDeriving, DerivInfo(..), isCoercible ) where
 
 #include "HsVersions.h"
 
@@ -466,11 +466,12 @@ deriveClause rep_tc scoped_tvs mb_lderiv_strat deriv_preds err_ctxt
         , text "mb_lderiv_strat" <+> ppr mb_lderiv_strat ]
       tcExtendNameTyVarEnv scoped_tvs $ do
         (mb_lderiv_strat', via_tvs) <- tcDerivStrategy mb_lderiv_strat
+        deriv_preds' <- filterPreds deriv_preds
         tcExtendTyVarEnv via_tvs $
         -- Moreover, when using DerivingVia one can bind type variables in
         -- the `via` type as well, so these type variables must also be
         -- brought into scope.
-          mapMaybeM (derivePred tc tys mb_lderiv_strat' via_tvs) deriv_preds
+          mapMaybeM (derivePred tc tys mb_lderiv_strat' via_tvs) deriv_preds'
           -- After typechecking the `via` type once, we then typecheck all
           -- of the classes associated with that `via` type in the
           -- `deriving` clause.
@@ -484,6 +485,28 @@ deriveClause rep_tc scoped_tvs mb_lderiv_strat deriv_preds err_ctxt
       -- name. See Note [Why we don't pass rep_tc into deriveTyData]
 
                   _ -> (rep_tc, mkTyVarTys tvs)     -- datatype
+
+filterPreds :: [LHsSigType GhcRn] -> TcM [LHsSigType GhcRn]
+filterPreds [] = return []
+filterPreds (pred : preds) = do
+  valid <- isCoercible pred
+  if valid
+  then do
+    derive_coercible_enabled <- xoptM LangExt.DeriveCoercible
+    when derive_coercible_enabled $ addErr deriveCoercibleErr
+    filterPreds preds
+  else do
+    preds <- filterPreds preds
+    return $ pred : preds
+
+isCoercible :: LHsSigType GhcRn -> TcM Bool
+isCoercible pred = do
+  (_, cls, _, _) <- tcHsDeriv pred
+  return $ occNameString (nameOccName $ className cls) == "Coercible"
+
+deriveCoercibleErr :: SDoc
+deriveCoercibleErr = hang (text "Deviring Coercible is illegal")
+         2 (text "Did you mean to enable DeriveCoercible?")
 
 -- | Process a single predicate in a @deriving@ clause.
 --

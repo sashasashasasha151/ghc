@@ -95,7 +95,7 @@ module GHC.Core.TyCon(
         synTyConDefn_maybe, synTyConRhs_maybe,
         famTyConFlav_maybe, famTcResVar,
         algTyConRhs,
-        newTyConRhs, newTyConEtadArity, newTyConEtadRhs,
+        newTyConRhs, newTyConSetAxioms, newTyConEtadArity, newTyConEtadRhs,
         unwrapNewTyCon_maybe, unwrapNewTyConEtad_maybe,
         newTyConDataCon_maybe,
         algTcFields,
@@ -997,7 +997,7 @@ data AlgTyConRhs
                         -- shorter than the declared arity of the 'TyCon'.
 
                         -- See Note [Newtype eta]
-        nt_co :: CoAxiom Unbranched,
+        nt_co :: [CoAxiom Unbranched],
                              -- The axiom coercion that creates the @newtype@
                              -- from the representation 'Type'.
 
@@ -1910,6 +1910,10 @@ isInjectiveTyCon (FunTyCon {})                 _                = True
 isInjectiveTyCon (AlgTyCon {})                 Nominal          = True
 isInjectiveTyCon (AlgTyCon {algTcRhs = rhs})   Representational
   = isGenInjAlgRhs rhs
+isInjectiveTyCon (AlgTyCon {algTcRhs = rhs})   Covariance
+  = isGenInjAlgRhs rhs
+isInjectiveTyCon (AlgTyCon {algTcRhs = rhs})   Contravariance
+  = isGenInjAlgRhs rhs
 isInjectiveTyCon (SynonymTyCon {})             _                = False
 isInjectiveTyCon (FamilyTyCon { famTcFlav = DataFamilyTyCon _ })
                                                Nominal          = True
@@ -1951,13 +1955,13 @@ isNewTyCon _                                   = False
 -- Returns @Nothing@ if this is not possible.
 unwrapNewTyCon_maybe :: TyCon -> Maybe ([TyVar], Type, CoAxiom Unbranched)
 unwrapNewTyCon_maybe (AlgTyCon { tyConTyVars = tvs,
-                                 algTcRhs = NewTyCon { nt_co = co,
+                                 algTcRhs = NewTyCon { nt_co = (co : _),
                                                        nt_rhs = rhs }})
                            = Just (tvs, rhs, co)
 unwrapNewTyCon_maybe _     = Nothing
 
 unwrapNewTyConEtad_maybe :: TyCon -> Maybe ([TyVar], Type, CoAxiom Unbranched)
-unwrapNewTyConEtad_maybe (AlgTyCon { algTcRhs = NewTyCon { nt_co = co,
+unwrapNewTyConEtad_maybe (AlgTyCon { algTcRhs = NewTyCon { nt_co = (co : []),
                                                            nt_etad_rhs = (tvs,rhs) }})
                            = Just (tvs, rhs, co)
 unwrapNewTyConEtad_maybe _ = Nothing
@@ -2426,6 +2430,10 @@ newTyConRhs (AlgTyCon {tyConTyVars = tvs, algTcRhs = NewTyCon { nt_rhs = rhs }})
     = (tvs, rhs)
 newTyConRhs tycon = pprPanic "newTyConRhs" (ppr tycon)
 
+newTyConSetAxioms :: [CoAxiom Unbranched] -> TyCon -> TyCon
+newTyConSetAxioms axioms alg@(AlgTyCon {algTcRhs = nt@NewTyCon{}}) = alg{algTcRhs=nt{nt_co = axioms}}
+newTyConSetAxioms _ tycon = pprPanic "newTyConSetAxioms" (ppr tycon)
+
 -- | The number of type parameters that need to be passed to a newtype to
 -- resolve it. May be less than in the definition if it can be eta-contracted.
 newTyConEtadArity :: TyCon -> Int
@@ -2443,11 +2451,11 @@ newTyConEtadRhs tycon = pprPanic "newTyConEtadRhs" (ppr tycon)
 -- construct something with the @newtype@s type from its representation type
 -- (right hand side). If the supplied 'TyCon' is not a @newtype@, returns
 -- @Nothing@
-newTyConCo_maybe :: TyCon -> Maybe (CoAxiom Unbranched)
+newTyConCo_maybe :: TyCon -> Maybe [CoAxiom Unbranched]
 newTyConCo_maybe (AlgTyCon {algTcRhs = NewTyCon { nt_co = co }}) = Just co
 newTyConCo_maybe _                                               = Nothing
 
-newTyConCo :: TyCon -> CoAxiom Unbranched
+newTyConCo :: TyCon -> [CoAxiom Unbranched]
 newTyConCo tc = case newTyConCo_maybe tc of
                  Just co -> co
                  Nothing -> pprPanic "newTyConCo" (ppr tc)

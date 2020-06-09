@@ -863,11 +863,13 @@ anyRewritableTyVar ignore_cos role pred ty
     go rl bvs (CoercionTy co)    = go_co rl bvs co  -- ToDo: check
 
     go_tc NomEq  bvs _  tys = any (go NomEq bvs) tys
-    go_tc ReprEq bvs tc tys = any (go_arg bvs)
+    go_tc _ bvs tc tys = any (go_arg bvs)
                               (tyConRolesRepresentational tc `zip` tys)
 
     go_arg bvs (Nominal,          ty) = go NomEq  bvs ty
     go_arg bvs (Representational, ty) = go ReprEq bvs ty
+    go_arg bvs (Covariance, ty) = go CoEq bvs ty
+    go_arg bvs (Contravariance, ty) = go ContraEq bvs ty
     go_arg _   (Phantom,          _)  = False  -- We never rewrite with phantoms
 
     go_co rl bvs co
@@ -1710,7 +1712,7 @@ pickQuantifiablePreds qtvs theta
 
     -- See Note [Quantifying over equality constraints]
     quantify_equality NomEq  ty1 ty2 = quant_fun ty1 || quant_fun ty2
-    quantify_equality ReprEq _   _   = True
+    quantify_equality _ _   _   = True
 
     quant_fun ty
       = case tcSplitTyConApp_maybe ty of
@@ -1725,7 +1727,7 @@ boxEqPred eq_rel ty1 ty2
   = case eq_rel of
       NomEq  | homo_kind -> Just (eqClass,        [k1,     ty1, ty2])
              | otherwise -> Just (heqClass,       [k1, k2, ty1, ty2])
-      ReprEq | homo_kind -> Just (coercibleClass, [k1,     ty1, ty2])
+      _ | homo_kind -> Just (coercibleClass, [k1,     ty1, ty2])
              | otherwise -> Nothing -- Sigh: we do not have hererogeneous Coercible
                                     --       so we can't abstract over it
                                     -- Nothing fundamental: we could add it
@@ -1822,7 +1824,7 @@ isImprovementPred :: PredType -> Bool
 isImprovementPred ty
   = case classifyPredType ty of
       EqPred NomEq t1 t2 -> not (t1 `tcEqType` t2)
-      EqPred ReprEq _ _  -> False
+      EqPred _ _ _  -> False
       ClassPred cls _    -> classHasFds cls
       IrredPred {}       -> True -- Might have equalities after reduction?
       ForAllPred {}      -> False
@@ -1846,7 +1848,7 @@ isInsolubleOccursCheck eq_rel tv ty
     go (LitTy {})    = False
     go (AppTy t1 t2) = case eq_rel of  -- See Note [AppTy and ReprEq]
                          NomEq  -> go t1 || go t2
-                         ReprEq -> go t1
+                         _ -> go t1
     go (FunTy _ t1 t2) = go t1 || go t2
     go (ForAllTy (Bndr tv' _) inner_ty)
       | tv' == tv = False

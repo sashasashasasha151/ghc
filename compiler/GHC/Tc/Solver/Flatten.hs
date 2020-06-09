@@ -1072,6 +1072,8 @@ flatten_args_fast orig_binders orig_inner_ki orig_roles orig_tys
           -- we've already established that they're all anonymous.
           Nominal          -> setEqRel NomEq  $ flatten_one ty
           Representational -> setEqRel ReprEq $ flatten_one ty
+          Covariance       -> setEqRel CoEq $ flatten_one ty
+          Contravariance   -> setEqRel ContraEq $ flatten_one ty
           Phantom          -> -- See Note [Phantoms in the flattener]
                               do { ty <- liftTcS $ zonkTcType ty
                                  ; return (ty, mkReflCo Phantom ty) }

@@ -31,7 +31,7 @@ module GHC.Core.Coercion (
         mkAxInstRHS, mkUnbranchedAxInstRHS,
         mkAxInstLHS, mkUnbranchedAxInstLHS,
         mkPiCo, mkPiCos, mkCoCast,
-        mkSymCo, mkTransCo, mkTransMCo,
+        mkSymCo, mkInvCo, mkTransCo, mkTransMCo,
         mkNthCo, nthCoRole, mkLRCo,
         mkInstCo, mkAppCo, mkAppCos, mkTyConAppCo, mkFunCo,
         mkForAllCo, mkForAllCos, mkHomoForAllCos,
@@ -114,7 +114,9 @@ module GHC.Core.Coercion (
 
         simplifyArgsWorker,
 
-        badCoercionHole, badCoercionHoleCo
+        badCoercionHole, badCoercionHoleCo,
+
+        minimalCommonRole
        ) where
 
 #include "HsVersions.h"
@@ -704,7 +706,22 @@ mkFunCo r co1 co2
   | Just (ty1, _) <- isReflCo_maybe co1
   , Just (ty2, _) <- isReflCo_maybe co2
   = mkReflCo r (mkVisFunTy ty1 ty2)
+  | coercionRole co1 == Contravariance
+  , coercionRole co2 == Covariance
+  , (minimalCommonRole r Covariance) /= Representational = FunCo (minimalCommonRole r Covariance) co1 co2
   | otherwise = FunCo r co1 co2
+
+minimalCommonRole :: Role -> Role -> Role
+minimalCommonRole Nominal          _                = Nominal
+minimalCommonRole _                Nominal          = Nominal
+minimalCommonRole Representational _                = Representational
+minimalCommonRole _                Representational = Representational
+minimalCommonRole Covariance       Contravariance   = Representational
+minimalCommonRole Contravariance   Covariance       = Representational
+minimalCommonRole Covariance       Covariance       = Covariance
+minimalCommonRole Contravariance   Contravariance   = Contravariance
+minimalCommonRole Phantom          r2               = r2
+minimalCommonRole r1               Phantom          = r1
 
 -- | Apply a 'Coercion' to another 'Coercion'.
 -- The second coercion must be Nominal, unless the first is Phantom.
@@ -963,7 +980,19 @@ mkSymCo :: Coercion -> Coercion
 mkSymCo co | isReflCo co          = co
 mkSymCo    (SymCo co)             = co
 mkSymCo    (SubCo (SymCo co))     = SubCo co
-mkSymCo co                        = SymCo co
+mkSymCo co | isSymetry co         = SymCo co
+mkSymCo _                         = panic "Invalid coercion role"
+
+isSymetry :: Coercion -> Bool
+isSymetry co' = case coercionRole co' of
+  Phantom -> True
+  Nominal -> True
+  _ -> False
+
+mkInvCo :: Coercion -> Coercion
+mkInvCo (InvCo _ co) = co
+mkInvCo co | coercionRole co == Covariance = InvCo Covariance co
+mkInvCo co = co
 
 -- | Create a new 'Coercion' by composing the two given 'Coercion's transitively.
 --   (co1 ; co2)
@@ -1179,14 +1208,14 @@ mkKindCo co
 mkSubCo :: Coercion -> Coercion
 -- Input coercion is Nominal, result is Representational
 -- see also Note [Role twiddling functions]
-mkSubCo (Refl ty) = GRefl Representational ty MRefl
-mkSubCo (GRefl Nominal ty co) = GRefl Representational ty co
+mkSubCo (Refl ty) = GRefl Covariance ty MRefl
+mkSubCo (GRefl Nominal ty co) = GRefl Covariance ty co
 mkSubCo (TyConAppCo Nominal tc cos)
-  = TyConAppCo Representational tc (applyRoles tc cos)
+  = TyConAppCo Covariance tc (applyRoles tc cos)
 mkSubCo (FunCo Nominal arg res)
-  = FunCo Representational
-          (downgradeRole Representational Nominal arg)
-          (downgradeRole Representational Nominal res)
+  = FunCo Covariance
+          (downgradeRole Covariance Nominal arg)
+          (downgradeRole Covariance Nominal res)
 mkSubCo co = ASSERT2( coercionRole co == Nominal, ppr co <+> ppr (coercionRole co) )
              SubCo co
 
@@ -1321,12 +1350,18 @@ nthRole Representational tc n
 
 ltRole :: Role -> Role -> Bool
 -- Is one role "less" than another?
---     Nominal < Representational < Phantom
-ltRole Phantom          _       = False
-ltRole Representational Phantom = True
-ltRole Representational _       = False
-ltRole Nominal          Nominal = False
-ltRole Nominal          _       = True
+--     Nominal < Representational < (Covariance || Contravariance) < Phantom
+ltRole Phantom          _              = False
+ltRole Covariance       Phantom        = True
+ltRole Contravariance   Phantom        = True
+ltRole Covariance       _              = False
+ltRole Contravariance   _              = False
+ltRole Representational Phantom        = True
+ltRole Representational Covariance     = True
+ltRole Representational Contravariance = True
+ltRole Representational _              = False
+ltRole Nominal          Nominal        = False
+ltRole Nominal          _              = True
 
 -------------------------------
 
@@ -2356,7 +2391,7 @@ coercionRole = go
     go (LRCo {}) = Nominal
     go (InstCo co _) = go co
     go (KindCo {}) = Nominal
-    go (SubCo _) = Representational
+    go (SubCo _) = Covariance
     go (AxiomRuleCo ax _) = coaxrRole ax
 
 {-

@@ -55,7 +55,7 @@ import GHC.Types.Id
 import GHC.Types.Id.Info
 import GHC.Types.Var.Env
 import GHC.Types.Var.Set
-import GHC.Core.Coercion ( ltRole )
+import GHC.Core.Coercion ( ltRole, minimalCommonRole )
 import GHC.Types.Basic
 import GHC.Types.SrcLoc
 import GHC.Types.Unique ( mkBuiltinUnique )
@@ -586,28 +586,31 @@ irDataCon datacon
       = dataConFullSig datacon
 
 irType :: VarSet -> Type -> RoleM ()
-irType = go
+irType = go Phantom
   where
-    go lcls ty                 | Just ty' <- coreView ty -- #14101
-                               = go lcls ty'
-    go lcls (TyVarTy tv)       = unless (tv `elemVarSet` lcls) $
-                                 updateRole Representational tv
-    go lcls (AppTy t1 t2)      = go lcls t1 >> markNominal lcls t2
-    go lcls (TyConApp tc tys)  = do { roles <- lookupRolesX tc
-                                    ; zipWithM_ (go_app lcls) roles tys }
-    go lcls (ForAllTy tvb ty)  = do { let tv = binderVar tvb
-                                          lcls' = extendVarSet lcls tv
-                                    ; markNominal lcls (tyVarKind tv)
-                                    ; go lcls' ty }
-    go lcls (FunTy _ arg res)  = go lcls arg >> go lcls res
-    go _    (LitTy {})         = return ()
+    go maxRole lcls ty                | Just ty' <- coreView ty -- #14101
+                                      = go maxRole lcls ty'
+    go maxRole lcls (TyVarTy tv)      = unless (tv `elemVarSet` lcls) $
+                                        updateRole maxRole tv
+    go maxRole lcls (AppTy t1 t2)     = go maxRole lcls t1 >> markNominal lcls t2
+    go maxRole lcls (TyConApp tc tys) = do { roles <- lookupRolesX tc
+                                           ; zipWithM_ (go_app maxRole lcls) roles tys }
+    go maxRole lcls (ForAllTy tvb ty) = do { let tv = binderVar tvb
+                                                 lcls' = extendVarSet lcls tv
+                                           ; markNominal lcls (tyVarKind tv)
+                                           ; go maxRole lcls' ty }
+    go maxRole lcls (FunTy _ arg res) = go (minimalCommonRole maxRole Contravariance) lcls arg >> 
+                                        go (minimalCommonRole maxRole Covariance) lcls res
+    go _       _    (LitTy {})        = return ()
       -- See Note [Coercions in role inference]
-    go lcls (CastTy ty _)      = go lcls ty
-    go _    (CoercionTy _)     = return ()
+    go maxRole lcls (CastTy ty _)     = go maxRole lcls ty
+    go _       _    (CoercionTy _)    = return ()
 
-    go_app _ Phantom _ = return ()                 -- nothing to do here
-    go_app lcls Nominal ty = markNominal lcls ty  -- all vars below here are N
-    go_app lcls Representational ty = go lcls ty
+    go_app _       _    Phantom          _  = return ()                 -- nothing to do here
+    go_app _       lcls Nominal          ty = markNominal lcls ty       -- all vars below here are N
+    go_app maxRole lcls Covariance       ty = go (minimalCommonRole maxRole Covariance) lcls ty
+    go_app maxRole lcls Contravariance   ty = go (minimalCommonRole maxRole Contravariance) lcls ty
+    go_app maxRole lcls Representational ty = go (minimalCommonRole maxRole Representational) lcls ty
 
 irTcTyVars :: TyCon -> RoleM a -> RoleM a
 irTcTyVars tc thing
@@ -733,9 +736,10 @@ updateRoleEnv name n role
   = RM $ \_ _ _ state@(RIS { role_env = role_env }) -> ((),
          case lookupNameEnv role_env name of
            Nothing -> pprPanic "updateRoleEnv" (ppr name)
-           Just roles -> let (before, old_role : after) = splitAt n roles in
-                         if role `ltRole` old_role
-                         then let roles' = before ++ role : after
+           Just roles -> let (before, old_role : after) = splitAt n roles 
+                             new_role = minimalCommonRole old_role role in
+                         if new_role `ltRole` old_role
+                         then let roles' = before ++ new_role : after
                                   role_env' = extendNameEnv role_env name roles' in
                               RIS { role_env = role_env', update = True }
                          else state )

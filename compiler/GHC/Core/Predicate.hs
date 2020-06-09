@@ -97,16 +97,20 @@ getClassPredTys_maybe ty = case splitTyConApp_maybe ty of
 
 -- | A choice of equality relation. This is separate from the type 'Role'
 -- because 'Phantom' does not define a (non-trivial) equality relation.
-data EqRel = NomEq | ReprEq
+data EqRel = NomEq | ReprEq | CoEq | ContraEq
   deriving (Eq, Ord)
 
 instance Outputable EqRel where
   ppr NomEq  = text "nominal equality"
   ppr ReprEq = text "representational equality"
+  ppr CoEq  = text "covariance equality"
+  ppr ContraEq = text "contravariance equality"
 
 eqRelRole :: EqRel -> Role
 eqRelRole NomEq  = Nominal
 eqRelRole ReprEq = Representational
+eqRelRole CoEq  = Covariance
+eqRelRole ContraEq = Contravariance
 
 getEqPredTys :: PredType -> (Type, Type)
 getEqPredTys ty

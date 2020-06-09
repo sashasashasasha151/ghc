@@ -1361,7 +1361,7 @@ mkEqErr1 ctxt ct   -- Wanted or derived;
                            = mk_wanted_extra (ctLoc ct) exp_syns
              coercible_msg = case ctEqRel ct of
                NomEq  -> empty
-               ReprEq -> mkCoercibleExplanation rdr_env fam_envs ty1 ty2
+               _ -> mkCoercibleExplanation rdr_env fam_envs ty1 ty2
        ; dflags <- getDynFlags
        ; traceTc "mkEqErr1" (ppr ct $$ pprCtOrigin (ctOrigin ct) $$ ppr keep_going)
        ; let report = mconcat [important wanted_msg, important coercible_msg,
@@ -1834,7 +1834,7 @@ misMatchMsg ct oriented ty1 ty2
                    , if is_oriented then ("actual " ++ what) else "" ]
     padding = length herald1 - length herald2
 
-    is_repr = case ctEqRel ct of { ReprEq -> True; NomEq -> False }
+    is_repr = case ctEqRel ct of { NomEq -> False; _ -> True;  }
     is_oriented = isJust oriented
 
     orig = ctOrigin ct

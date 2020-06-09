@@ -494,8 +494,8 @@ Roles are defined here to avoid circular dependencies.
 --
 -- Order of constructors matters: the Ord instance coincides with the *super*typing
 -- relation on roles.
-data Role = Nominal | Representational | Phantom
-  deriving (Eq, Ord, Data.Data)
+data Role = Nominal | Representational | Covariance | Contravariance | Phantom
+  deriving (Eq, Data.Data)
 
 -- These names are slurped into the parser code. Changing these strings
 -- will change the **surface syntax** that GHC accepts! If you want to
@@ -503,6 +503,8 @@ data Role = Nominal | Representational | Phantom
 -- mkRoleAnnotDecl in GHC.Parser.PostProcess
 fsFromRole :: Role -> FastString
 fsFromRole Nominal          = fsLit "nominal"
+fsFromRole Covariance       = fsLit "covariance"
+fsFromRole Contravariance   = fsLit "contravariance"
 fsFromRole Representational = fsLit "representational"
 fsFromRole Phantom          = fsLit "phantom"
 
@@ -513,11 +515,15 @@ instance Binary Role where
   put_ bh Nominal          = putByte bh 1
   put_ bh Representational = putByte bh 2
   put_ bh Phantom          = putByte bh 3
+  put_ bh Covariance       = putByte bh 4
+  put_ bh Contravariance   = putByte bh 5
 
   get bh = do tag <- getByte bh
               case tag of 1 -> return Nominal
                           2 -> return Representational
                           3 -> return Phantom
+                          4 -> return Covariance
+                          5 -> return Contravariance
                           _ -> panic ("get Role " ++ show tag)
 
 {-

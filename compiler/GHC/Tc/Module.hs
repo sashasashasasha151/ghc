@@ -126,6 +126,7 @@ import GHC.Core.DataCon
 import GHC.Core.Type
 import GHC.Core.Class
 import GHC.Types.Basic hiding( SuccessFlag(..) )
+import GHC.Core.Coercion (ltRole)
 import GHC.Core.Coercion.Axiom
 import GHC.Types.Annotations
 import Data.List ( find, sortBy, sort )
@@ -1196,9 +1197,10 @@ checkBootTyCon is_boot tc1 tc2
     -- the current role system isn't expressive enough to do this.
     -- Having explicit proj-roles would solve this problem.
 
+    rolesSubtypeOf :: [Role] -> [Role] -> Bool
     rolesSubtypeOf [] [] = True
     -- NB: this relation is the OPPOSITE of the subroling relation
-    rolesSubtypeOf (x:xs) (y:ys) = x >= y && rolesSubtypeOf xs ys
+    rolesSubtypeOf (x:xs) (y:ys) = (x /= y && ltRole y x) && rolesSubtypeOf xs ys
     rolesSubtypeOf _ _ = False
 
     -- Note [Synonyms implement abstract data]

@@ -3757,6 +3757,7 @@ xFlagsDeps = [
                      "and has been removed from the Haskell language."),
   flagSpec "DefaultSignatures"                LangExt.DefaultSignatures,
   flagSpec "DeriveAnyClass"                   LangExt.DeriveAnyClass,
+  flagSpec "DeriveCoercible"                  LangExt.DeriveCoercible,
   flagSpec "DeriveDataTypeable"               LangExt.DeriveDataTypeable,
   flagSpec "DeriveFoldable"                   LangExt.DeriveFoldable,
   flagSpec "DeriveFunctor"                    LangExt.DeriveFunctor,
@@ -3880,7 +3881,8 @@ xFlagsDeps = [
   flagSpec "UnicodeSyntax"                    LangExt.UnicodeSyntax,
   flagSpec "UnliftedFFITypes"                 LangExt.UnliftedFFITypes,
   flagSpec "UnliftedNewtypes"                 LangExt.UnliftedNewtypes,
-  flagSpec "ViewPatterns"                     LangExt.ViewPatterns
+  flagSpec "ViewPatterns"                     LangExt.ViewPatterns,
+  flagSpec "DeriveCoercible"                  LangExt.DeriveCoercible
   ]
 
 defaultFlags :: Settings -> [GeneralFlag]

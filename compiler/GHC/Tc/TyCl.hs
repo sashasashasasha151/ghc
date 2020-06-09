@@ -37,7 +37,7 @@ import GHC.Tc.Utils.Zonk
 import GHC.Tc.TyCl.Utils
 import GHC.Tc.TyCl.Class
 import {-# SOURCE #-} GHC.Tc.TyCl.Instance( tcInstDecls1 )
-import GHC.Tc.Deriv (DerivInfo(..))
+import GHC.Tc.Deriv (DerivInfo(..), isCoercible)
 import GHC.Tc.Utils.Unify ( checkTvConstraints )
 import GHC.Tc.Gen.HsType
 import GHC.Tc.Instance.Class( AssocInstInfo(..) )
@@ -2690,8 +2690,9 @@ tcDataDefn err_ctxt roles_info tc_name
                                     , di_scoped_tvs = tcTyConScopedTyVars tctc
                                     , di_clauses = unLoc derivs
                                     , di_ctxt = err_ctxt }
+       ; tycon' <- setNewtypeCoercionAxioms tycon deriv_info
        ; traceTc "tcDataDefn" (ppr tc_name $$ ppr tycon_binders $$ ppr extra_bndrs)
-       ; return (tycon, [deriv_info]) }
+       ; return (tycon', [deriv_info]) }
   where
     -- Abstract data types in hsig files can have arbitrary kinds,
     -- because they may be implemented by type synonyms
@@ -2717,7 +2718,25 @@ tcDataDefn err_ctxt roles_info tc_name
           DataType -> return (mkDataTyConRhs data_cons)
           NewType  -> ASSERT( not (null data_cons) )
                       mkNewTyConRhs tc_name tycon (head data_cons)
+    
+setNewtypeCoercionAxioms :: TyCon -> DerivInfo -> TcM TyCon
+setNewtypeCoercionAxioms nt deriv_info 
+  = do { derive_coercible_enabled <- xoptM LangExt.DeriveCoercible
+       ; roles <- extractRoles nt deriv_info
+       ; let roles' = if not derive_coercible_enabled then [Covariance, Contravariance] else roles
+       ; co_tycon_name <- newImplicitBinder (tyConName nt) mkNewTyCoOcc
+       ; let nt_ax = mkNewTypeCoAxiom roles' co_tycon_name nt (fst $ newTyConEtadRhs nt) (tyConRoles nt) (snd $ newTyConEtadRhs nt) 
+       ; return $ newTyConSetAxioms nt_ax nt
+       }
 
+extractRoles :: TyCon -> DerivInfo -> TcM [Role]
+extractRoles tc di = do 
+  let preds = flip concatMap (di_clauses di) $ \(L _ (HsDerivingClause { deriv_clause_tys = L _ preds })) -> preds
+  filteredPreds <- filterM isCoercible preds
+  return $ map (\p -> let (f : _) = hsScopedTvs p in
+                if f == tyConName tc
+                then Covariance
+                else Contravariance ) filteredPreds
 
 -------------------------
 kcTyFamInstEqn :: TcTyCon -> LTyFamInstEqn GhcRn -> TcM ()
@@ -4561,15 +4580,15 @@ checkValidRoles tc
           Nothing    -> report_error $ text "type variable" <+> quotes (ppr tv) <+>
                                        text "missing in environment"
 
-    check_ty_roles env Representational (TyConApp tc tys)
-      = let roles' = tyConRoles tc in
-        zipWithM_ (maybe_check_ty_roles env) roles' tys
-
     check_ty_roles env Nominal (TyConApp _ tys)
       = mapM_ (check_ty_roles env Nominal) tys
 
     check_ty_roles _   Phantom ty@(TyConApp {})
       = pprPanic "check_ty_roles" (ppr ty)
+
+    check_ty_roles env _ (TyConApp tc tys)
+      = let roles' = tyConRoles tc in
+        zipWithM_ (maybe_check_ty_roles env) roles' tys
 
     check_ty_roles env role (AppTy ty1 ty2)
       =  check_ty_roles env role    ty1

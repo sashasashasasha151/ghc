@@ -712,17 +712,18 @@ mkSingleCoAxiom role ax_name tvs eta_tvs cvs fam_tc lhs_tys rhs_ty
 --   'CoAxiom', the 'TyVar's the arguments expected by the @newtype@ and
 --   the type the appropriate right hand side of the @newtype@, with
 --   the free variables a subset of those 'TyVar's.
-mkNewTypeCoAxiom :: Name -> TyCon -> [TyVar] -> [Role] -> Type -> CoAxiom Unbranched
-mkNewTypeCoAxiom name tycon tvs roles rhs_ty
-  = CoAxiom { co_ax_unique   = nameUnique name
+mkNewTypeCoAxiom :: [Role] -> Name -> TyCon -> [TyVar] -> [Role] -> Type -> [CoAxiom Unbranched]
+mkNewTypeCoAxiom new_roles name tycon tvs roles rhs_ty = flip map new_roles $ \role -> toCoAxiom role name tycon tvs roles rhs_ty
+  where
+    toCoAxiom role name tycon _ _ _ 
+      = CoAxiom { co_ax_unique   = nameUnique name
             , co_ax_name     = name
             , co_ax_implicit = True  -- See Note [Implicit axioms] in GHC.Core.TyCon
-            , co_ax_role     = Representational
+            , co_ax_role     = role
             , co_ax_tc       = tycon
             , co_ax_branches = unbranched (branch { cab_incomps = [] }) }
-  where
     branch = mkCoAxBranch tvs [] [] tycon (mkTyVarTys tvs) rhs_ty
-                          roles (getSrcSpan name)
+                            roles (getSrcSpan name)
 
 {-
 ************************************************************************

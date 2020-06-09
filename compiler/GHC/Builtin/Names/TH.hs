@@ -472,10 +472,12 @@ plainTVName  = libFun (fsLit "plainTV")  plainTVIdKey
 kindedTVName = libFun (fsLit "kindedTV") kindedTVIdKey
 
 -- data Role = ...
-nominalRName, representationalRName, phantomRName, inferRName :: Name
+nominalRName, representationalRName, phantomRName, covarRName, contravarRName, inferRName :: Name
 nominalRName          = libFun (fsLit "nominalR")          nominalRIdKey
 representationalRName = libFun (fsLit "representationalR") representationalRIdKey
 phantomRName          = libFun (fsLit "phantomR")          phantomRIdKey
+covarRName            = libFun (fsLit "covarR")          phantomRIdKey
+contravarRName        = libFun (fsLit "contravarR")          phantomRIdKey
 inferRName            = libFun (fsLit "inferR")            inferRIdKey
 
 -- data Kind = ...
@@ -1059,6 +1061,10 @@ stockStrategyIdKey    = mkPreludeDataConUnique 494
 anyclassStrategyIdKey = mkPreludeDataConUnique 495
 newtypeStrategyIdKey  = mkPreludeDataConUnique 496
 viaStrategyIdKey      = mkPreludeDataConUnique 497
+
+covarRIdKey, contravarRIdKey :: Unique
+covarRIdKey     = mkPreludeMiscIdUnique 415
+contravarRIdKey = mkPreludeMiscIdUnique 416
 
 {-
 ************************************************************************

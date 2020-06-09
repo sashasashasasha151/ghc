@@ -175,7 +175,7 @@ isTcReflexiveCo        = isReflexiveCo
 -- Note that the input coercion should always be nominal.
 maybeTcSubCo :: EqRel -> TcCoercion -> TcCoercion
 maybeTcSubCo NomEq  = id
-maybeTcSubCo ReprEq = mkTcSubCo
+maybeTcSubCo _ = mkTcSubCo
 
 
 {-

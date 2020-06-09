@@ -1096,6 +1096,7 @@ data Coercion
 
   | SymCo Coercion             -- :: e -> e
   | TransCo Coercion Coercion  -- :: e -> e -> e
+  | InvCo Role Coercion
 
   | NthCo  Role Int Coercion     -- Zero-indexed; decomposes (T t0 ... tn)
     -- :: "e" -> _ -> e0 -> e (inverse of TyConAppCo, see Note [TyConAppCo roles])

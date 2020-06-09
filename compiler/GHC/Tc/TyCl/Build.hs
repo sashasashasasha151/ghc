@@ -20,7 +20,7 @@ module GHC.Tc.TyCl.Build (
 import GHC.Prelude
 
 import GHC.Iface.Env
-import GHC.Core.FamInstEnv( FamInstEnvs, mkNewTypeCoAxiom )
+import GHC.Core.FamInstEnv( FamInstEnvs )
 import GHC.Builtin.Types( isCTupleTyConName )
 import GHC.Builtin.Types.Prim ( voidPrimTy )
 import GHC.Core.DataCon
@@ -49,14 +49,11 @@ mkNewTyConRhs :: Name -> TyCon -> DataCon -> TcRnIf m n AlgTyConRhs
 -- ^ Monadic because it makes a Name for the coercion TyCon
 --   We pass the Name of the parent TyCon, as well as the TyCon itself,
 --   because the latter is part of a knot, whereas the former is not.
-mkNewTyConRhs tycon_name tycon con
-  = do  { co_tycon_name <- newImplicitBinder tycon_name mkNewTyCoOcc
-        ; let nt_ax = mkNewTypeCoAxiom co_tycon_name tycon etad_tvs etad_roles etad_rhs
-        ; traceIf (text "mkNewTyConRhs" <+> ppr nt_ax)
-        ; return (NewTyCon { data_con    = con,
+mkNewTyConRhs _ tycon con
+  = do  { return (NewTyCon { data_con    = con,
                              nt_rhs      = rhs_ty,
                              nt_etad_rhs = (etad_tvs, etad_rhs),
-                             nt_co       = nt_ax,
+                             nt_co       = [],
                              nt_lev_poly = isKindLevPoly res_kind } ) }
                              -- Coreview looks through newtypes with a Nothing
                              -- for nt_co, or uses explicit coercions otherwise
@@ -79,9 +76,8 @@ mkNewTyConRhs tycon_name tycon con
         -- dataConInstOrigArgTys returns [].
 
     etad_tvs   :: [TyVar]  -- Matched lazily, so that mkNewTypeCo can
-    etad_roles :: [Role]   -- return a TyCon without pulling on rhs_ty
     etad_rhs   :: Type     -- See Note [Tricky iface loop] in GHC.Iface.Load
-    (etad_tvs, etad_roles, etad_rhs) = eta_reduce (reverse tvs) (reverse roles) rhs_ty
+    (etad_tvs, _, etad_rhs) = eta_reduce (reverse tvs) (reverse roles) rhs_ty
 
     eta_reduce :: [TyVar]       -- Reversed
                -> [Role]        -- also reversed
